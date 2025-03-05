@@ -1,7 +1,7 @@
 {
-  "name": "JIRA Mail",
-  "description": "This extension adds an email button to the toolbar which allows you to email the customer.",
-  "version": "0.0.1",
+  "name": "JIRA Mail for BCGE",
+  "description": "This extension adds an email button to the toolbar which allows you to email the BCGE.",
+  "version": "0.0.2",
   "background": {
     "scripts": ["background.js"],
     "persistent": false
