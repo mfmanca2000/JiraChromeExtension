@@ -4,7 +4,7 @@
 
 var mailto = document.getElementById("customfield_10537-val").innerHTML;
 mailto = mailto.substring(mailto.indexOf(">") + 1, mailto.lastIndexOf("<"));
-mailto = mailto + ';JIRA.Finnova@swisscom.com' + ';supportonboarding@bcge.ch'
+mailto = mailto + ';JIRA.Finnova@swisscom.com'
 
 var itsm = document.getElementById("customfield_10521-val").innerHTML.trim();
 var op = document.title.substring(document.title.indexOf("[") + 1, document.title.indexOf("]"));
