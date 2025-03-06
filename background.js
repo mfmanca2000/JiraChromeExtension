@@ -14,6 +14,18 @@ function getCustomMailtoUrl() {
 async function executeMailto(tab_id, to, subject, body, selection) {
   const customUrl = await getCustomMailtoUrl();
   const default_handler = customUrl.length === 0;
+// In MV3, we need to use chrome.storage instead of localStorage
+function getCustomMailtoUrl() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('customMailtoUrl', (result) => {
+      resolve(result.customMailtoUrl || "");
+    });
+  });
+}
+
+async function executeMailto(tab_id, to, subject, body, selection) {
+  const customUrl = await getCustomMailtoUrl();
+  const default_handler = customUrl.length === 0;
 
   var action_url = "mailto:" + to;
   action_url += "?";
@@ -27,6 +39,7 @@ async function executeMailto(tab_id, to, subject, body, selection) {
     // Append the current selection to the end of the text message.
     if (selection.length > 0) {
       action_url += encodeURIComponent("\n\n") +
+        encodeURIComponent(selection);
         encodeURIComponent(selection);
     }
   }
@@ -46,10 +59,12 @@ async function executeMailto(tab_id, to, subject, body, selection) {
 }
 
 chrome.runtime.onConnect.addListener(function (port) {
+chrome.runtime.onConnect.addListener(function (port) {
   var tab = port.sender.tab;
 
   // This will get called by the content script we execute in
   // the tab as a result of the user pressing the browser action.
+  port.onMessage.addListener(function (info) {
   port.onMessage.addListener(function (info) {
     var max_length = 1024;
 
@@ -67,6 +82,8 @@ chrome.runtime.onConnect.addListener(function (port) {
 });
 
 // Called when the user clicks on the browser action icon.
+// Changed from browserAction to action for Manifest V3
+chrome.action.onClicked.addListener(function (tab) {
 // Changed from browserAction to action for Manifest V3
 chrome.action.onClicked.addListener(function (tab) {
   // We can only inject scripts to find the title on pages loaded with http

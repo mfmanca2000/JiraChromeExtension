@@ -4,6 +4,10 @@
   "version": "0.0.2",
   "background": {
     "service_worker": "background.js"
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "mail_128x128.png"
   },
   "icons": {
     "128": "mail_128x128.png"
@@ -17,7 +21,15 @@
   ],
   "host_permissions": [
     "https://issue.swisscom.ch/*"
+    "tabs",
+    "scripting",
+    "clipboardWrite",
+    "storage"
   ],
+  "host_permissions": [
+    "https://issue.swisscom.ch/*"
+  ],
+  "action": {
   "action": {
     "default_title": "Jira Extension",
     "default_icon": "email_16x16.png"
