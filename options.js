@@ -5,29 +5,31 @@
 var gmail = "https://mail.google.com/mail/?extsrc=mailto&url=%s";
 
 function toggle(radioButton) {
-  if (window.localStorage == null) {
-    alert('Local storage is required for changing providers');
-    return;
-  }
+  // Use chrome.storage instead of localStorage
   if (document.getElementById('gmail').checked) {
-    window.localStorage.customMailtoUrl = gmail;
+    chrome.storage.local.set({ 'customMailtoUrl': gmail });
   } else {
-    window.localStorage.customMailtoUrl = "";
+    chrome.storage.local.set({ 'customMailtoUrl': "" });
   }
 }
 
 function main() {
-  if (window.localStorage == null) {
-    alert("LocalStorage must be enabled for changing options.");
-    document.getElementById('default').disabled = true;
-    document.getElementById('gmail').disabled = true;
-    return;
-  }
+  // Check for stored preference
+  chrome.storage.local.get('customMailtoUrl', function (result) {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError);
+      alert("Storage must be enabled for changing options.");
+      document.getElementById('default').disabled = true;
+      document.getElementById('gmail').disabled = true;
+      return;
+    }
 
-  // Default handler is checked. If we've chosen another provider, we must
-  // change the checkmark.
-  if (window.localStorage.customMailtoUrl == gmail)
-    document.getElementById('gmail').checked = true;
+    // Default handler is checked. If we've chosen another provider, we must
+    // change the checkmark.
+    if (result.customMailtoUrl === gmail) {
+      document.getElementById('gmail').checked = true;
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
