@@ -20,7 +20,8 @@
   ],
   "action": {
     "default_title": "Jira Extension",
-    "default_icon": "email_16x16.png"
+    "default_icon": "email_16x16.png",
+    "default_popup": "popup.html"
   },
   "manifest_version": 3
 }

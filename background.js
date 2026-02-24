@@ -45,8 +45,13 @@ async function executeMailto(tab_id, to, subject, body, selection) {
   }
 }
 
+// Stores the template body chosen in the popup until the content script responds.
+let pendingTemplateBody = null;
+
 chrome.runtime.onConnect.addListener(function (port) {
   var tab = port.sender.tab;
+  const templateBody = pendingTemplateBody;
+  pendingTemplateBody = null;
 
   // This will get called by the content script we execute in
   // the tab as a result of the user pressing the browser action.
@@ -55,7 +60,14 @@ chrome.runtime.onConnect.addListener(function (port) {
 
     if (info.selection.length > max_length)
       info.selection = info.selection.substring(0, max_length);
-    executeMailto(tab.id, info.mailto, info.title, tab.url, info.selection);
+
+    // Prepend the template body (if any) before the page URL.
+    let body = tab.url;
+    if (templateBody !== null && templateBody.length > 0) {
+      body = templateBody + "\n\n" + tab.url;
+    }
+
+    executeMailto(tab.id, info.mailto, info.title, body, info.selection);
 
     // Copy to clipboard using modern clipboard API in content script context
     chrome.scripting.executeScript({
@@ -70,8 +82,29 @@ chrome.runtime.onConnect.addListener(function (port) {
   });
 });
 
+// Handles the sendMail message sent from popup.js when the user picks a template.
+chrome.runtime.onMessage.addListener(function (message) {
+  if (message.action === 'sendMail') {
+    pendingTemplateBody = message.templateBody;
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      const tab = tabs[0];
+      if (tab.url.indexOf("https://issue.swisscom.ch") !== 0) {
+        // Not a JIRA page — open mail with just the URL, no template body.
+        executeMailto(tab.id, "", "", tab.url, "");
+        pendingTemplateBody = null;
+      } else {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content_script.js"]
+        });
+      }
+    });
+  }
+});
+
 // Called when the user clicks on the browser action icon.
-// Changed from browserAction to action for Manifest V3
+// NOTE: This handler is only active when no default_popup is set in manifest.json.
+// With a popup configured it will not fire, but is kept here for reference.
 chrome.action.onClicked.addListener(function (tab) {
   // We can only inject scripts to find the title on pages loaded with http
   // and https so for all other pages, we don't ask for the title.
