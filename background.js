@@ -102,20 +102,24 @@ async function getTransitionId(baseUrl, issueKey, targetStatusName) {
 }
 
 // Posts a transition to move the issue to a new status.
-async function postTransition(baseUrl, issueKey, transitionId) {
+// Optional fields object is included in the POST body when provided
+// (required for mandatory transition-screen fields such as INC Status Reason).
+async function postTransition(baseUrl, issueKey, transitionId, fields) {
+  const body = { transition: { id: transitionId } };
+  if (fields) body.fields = fields;
   const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transition: { id: transitionId } })
+    body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
 }
 
 // Handles the setCompleted action: transitions the current issue to Completed,
 // going through In Progress first if the ticket is currently Assigned.
-// After transitioning, sets "INC Status Reason" = "No Further Action Required"
-// and optionally sets "INC Resolution" to the provided incResolution text.
+// "INC Status Reason" and "INC Resolution" are passed inside the Completed
+// transition POST because they are mandatory fields on the transition screen.
 // Field IDs are looked up dynamically by name from GET /rest/api/2/field.
 async function handleSetCompleted(incResolution, sendResponse) {
   try {
@@ -136,23 +140,15 @@ async function handleSetCompleted(incResolution, sendResponse) {
     const issueData = await issueRes.json();
     const status = issueData.fields.status.name;
 
-    if (status === 'Assigned') {
-      const tid1 = await getTransitionId(base, issueKey, 'In Progress');
-      await postTransition(base, issueKey, tid1);
-      const tid2 = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid2);
-    } else if (status === 'In Progress') {
-      const tid = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid);
-    } else if (status === 'Completed') {
-      sendResponse({ success: false, error: 'Ticket is already Completed' });
-      return;
-    } else {
-      sendResponse({ success: false, error: `Cannot complete from status "${status}"` });
+    if (status !== 'Assigned' && status !== 'In Progress') {
+      const msg = status === 'Completed' ? 'Ticket is already Completed'
+                                         : `Cannot complete from status "${status}"`;
+      sendResponse({ success: false, error: msg });
       return;
     }
 
-    // Look up custom field IDs by name
+    // Look up custom field IDs before transitioning so they can be
+    // included as mandatory fields in the Completed transition POST.
     const fieldsRes = await fetch(`${base}/field`, { credentials: 'include' });
     if (!fieldsRes.ok) throw new Error(`Could not fetch fields (HTTP ${fieldsRes.status})`);
     const allFields = await fieldsRes.json();
@@ -162,20 +158,21 @@ async function handleSetCompleted(incResolution, sendResponse) {
     if (!statusReasonField) throw new Error('Field "INC Status Reason" not found in JIRA');
     if (!resolutionField) throw new Error('Field "INC Resolution" not found in JIRA');
 
-    // Build update body: INC Status Reason is always set; INC Resolution only if provided
-    const updateFields = {};
-    updateFields[statusReasonField.id] = { value: 'No Further Action Required' };
+    const completionFields = {};
+    completionFields[statusReasonField.id] = { value: 'No Further Action Required' };
     if (incResolution && incResolution.length > 0) {
-      updateFields[resolutionField.id] = incResolution;
+      completionFields[resolutionField.id] = incResolution;
     }
 
-    const putRes = await fetch(`${base}/issue/${issueKey}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: updateFields })
-    });
-    if (!putRes.ok) throw new Error(`Failed to update INC fields (HTTP ${putRes.status})`);
+    if (status === 'Assigned') {
+      const tid1 = await getTransitionId(base, issueKey, 'In Progress');
+      await postTransition(base, issueKey, tid1);
+      const tid2 = await getTransitionId(base, issueKey, 'Completed');
+      await postTransition(base, issueKey, tid2, completionFields);
+    } else {
+      const tid = await getTransitionId(base, issueKey, 'Completed');
+      await postTransition(base, issueKey, tid, completionFields);
+    }
 
     sendResponse({ success: true });
   } catch (err) {
