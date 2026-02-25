@@ -176,6 +176,7 @@ async function handleSetCompleted(incResolution, sendResponse) {
     }
 
     sendResponse({ success: true });
+    chrome.tabs.reload(tab.id);
   } catch (err) {
     sendResponse({ success: false, error: err.message });
   }
