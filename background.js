@@ -116,8 +116,8 @@ async function postTransition(baseUrl, issueKey, transitionId, fields) {
   if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
 }
 
-// Handles the setCompleted action: transitions the current issue to Resolved,
-// going through In Progress first if the ticket is currently Assigned.
+// Handles the setCompleted action: transitions the current issue to Resolved.
+// Pending transitions directly; Assigned goes via In Progress first.
 // "INC Status Reason" and "INC Resolution" are passed inside the Resolved
 // transition POST because they are mandatory fields on the transition screen.
 // Field IDs are looked up dynamically by name from GET /rest/api/2/field.
@@ -140,7 +140,7 @@ async function handleSetCompleted(incResolution, sendResponse) {
     const issueData = await issueRes.json();
     const status = issueData.fields.status.name;
 
-    if (status !== 'Assigned' && status !== 'In Progress') {
+    if (status !== 'Assigned' && status !== 'In Progress' && status !== 'Pending') {
       const msg = status === 'Resolved' ? 'Ticket is already Resolved'
                                         : `Cannot resolve from status "${status}"`;
       sendResponse({ success: false, error: msg });
@@ -170,6 +170,7 @@ async function handleSetCompleted(incResolution, sendResponse) {
       const tid2 = await getTransitionId(base, issueKey, 'Resolved');
       await postTransition(base, issueKey, tid2, completionFields);
     } else {
+      // In Progress and Pending both transition directly to Resolved
       const tid = await getTransitionId(base, issueKey, 'Resolved');
       await postTransition(base, issueKey, tid, completionFields);
     }
