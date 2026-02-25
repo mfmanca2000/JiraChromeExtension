@@ -4,39 +4,166 @@
 <head>
   <title>Options for the Jira Extension</title>
   <style>
-    #providerSelection {
+    body {
       font-family: Helvetica, Arial, sans-serif;
       font-size: 10pt;
+      max-width: 580px;
+      padding: 16px;
+    }
+    h2 {
+      font-size: 13pt;
+      margin: 0 0 16px 0;
+    }
+    .section {
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-weight: bold;
+      font-size: 11pt;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 4px;
+    }
+    .template-entry {
+      display: flex;
+      align-items: flex-start;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      background: #fafafa;
+    }
+    .template-entry-info {
+      flex: 1;
+      overflow: hidden;
+    }
+    .template-entry-name {
+      font-weight: bold;
+      font-size: 10pt;
+    }
+    .template-entry-preview {
+      font-size: 9pt;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .template-entry-actions {
+      display: flex;
+      gap: 4px;
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+    #template-form {
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 8px;
+      background: #f0f4ff;
+    }
+    #template-form label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    #template-form input[type="text"],
+    #template-form textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 10pt;
+      padding: 4px;
+      margin-bottom: 8px;
+    }
+    #template-form textarea {
+      height: 110px;
+      resize: vertical;
+    }
+    .btn {
+      padding: 4px 10px;
+      font-size: 10pt;
+      cursor: pointer;
+      border-radius: 3px;
+      border: 1px solid #aaa;
+    }
+    .btn-primary {
+      background: #4285f4;
+      color: white;
+      border-color: #3367d6;
+    }
+    .btn-danger {
+      background: #ea4335;
+      color: white;
+      border-color: #c5221f;
+    }
+    .btn-sm {
+      padding: 2px 8px;
+      font-size: 9pt;
+    }
+    #add-template-btn {
+      margin-top: 4px;
+    }
+    .no-templates-msg {
+      color: #888;
+      font-style: italic;
+      font-size: 9pt;
+      margin-bottom: 6px;
+    }
+    #providerSelection label {
+      display: block;
+      margin-bottom: 4px;
     }
   </style>
   <script src="options.js"></script>
 </head>
 
 <body>
-  <table class="simple">
+  <table>
     <tr>
-      <td rowspan="2" valign="top" align="center" width="80">
+      <td valign="top" align="center" width="80">
         <img src="mail_128x128.png" width="64" height="64" />
       </td>
-      <td height="22"></td>
-    </tr>
-    <tr>
-      <td valign="center">
-        <div id="providerSelection">
-          <strong>Select provider to use when emailing a web page address:</strong>
-          <br /><br />
-          <label>
-            <input id="default" type="radio" name="mailto" value="mailto" checked>
-            Your default mail handler<br>
-          </label>
-
-          <label>
-            <input id="gmail" type="radio" name="mailto" value="gmail">Gmail<br>
-          </label>
-        </div>
+      <td valign="middle" style="padding-left:8px">
+        <h2>Jira Extension Options</h2>
       </td>
     </tr>
   </table>
+
+  <div class="section">
+    <div class="section-title">Mail Provider</div>
+    <div id="providerSelection">
+      <label>
+        <input id="default" type="radio" name="mailto" value="mailto" checked>
+        Your default mail handler
+      </label>
+      <label>
+        <input id="gmail" type="radio" name="mailto" value="gmail">
+        Gmail
+      </label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Mail Templates</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Predefined mail body texts shown in the popup when you click the extension icon.
+    </p>
+    <div id="template-list"></div>
+    <button class="btn" id="add-template-btn">+ Add Template</button>
+    <div id="template-form" style="display:none">
+      <input type="hidden" id="form-edit-id" value="">
+      <label for="form-name">Name</label>
+      <input type="text" id="form-name" placeholder="e.g. Initial Response">
+      <label for="form-body">Body</label>
+      <textarea id="form-body" placeholder="Enter the mail body text..."></textarea>
+      <div>
+        <button class="btn btn-primary" id="form-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="form-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
