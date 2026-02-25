@@ -55,20 +55,20 @@
       margin-left: 8px;
       flex-shrink: 0;
     }
-    #template-form {
+    .template-form-panel {
       border: 1px solid #aaa;
       border-radius: 4px;
       padding: 10px;
       margin-top: 8px;
       background: #f0f4ff;
     }
-    #template-form label {
+    .template-form-panel label {
       display: block;
       font-weight: bold;
       margin-bottom: 2px;
     }
-    #template-form input[type="text"],
-    #template-form textarea {
+    .template-form-panel input[type="text"],
+    .template-form-panel textarea {
       width: 100%;
       box-sizing: border-box;
       font-family: inherit;
@@ -76,7 +76,7 @@
       padding: 4px;
       margin-bottom: 8px;
     }
-    #template-form textarea {
+    .template-form-panel textarea {
       height: 110px;
       resize: vertical;
     }
@@ -151,7 +151,7 @@
     </p>
     <div id="template-list"></div>
     <button class="btn" id="add-template-btn">+ Add Template</button>
-    <div id="template-form" style="display:none">
+    <div id="template-form" class="template-form-panel" style="display:none">
       <input type="hidden" id="form-edit-id" value="">
       <label for="form-name">Name</label>
       <input type="text" id="form-name" placeholder="e.g. Initial Response">
@@ -161,6 +161,27 @@
         <button class="btn btn-primary" id="form-save-btn">Save</button>
         &nbsp;
         <button class="btn" id="form-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Completion Comment Templates</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Predefined comment texts added to the JIRA ticket when using Set Completed.
+    </p>
+    <div id="comment-template-list"></div>
+    <button class="btn" id="add-comment-template-btn">+ Add Template</button>
+    <div id="comment-template-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="comment-form-edit-id" value="">
+      <label for="comment-form-name">Name</label>
+      <input type="text" id="comment-form-name" placeholder="e.g. Resolution Note">
+      <label for="comment-form-body">Body</label>
+      <textarea id="comment-form-body" placeholder="Enter the comment text..."></textarea>
+      <div>
+        <button class="btn btn-primary" id="comment-form-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="comment-form-cancel-btn">Cancel</button>
       </div>
     </div>
   </div>

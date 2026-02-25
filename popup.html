@@ -91,17 +91,35 @@
   </style>
 </head>
 <body>
-  <h3>Select Mail Template</h3>
-  <ul id="template-list" class="template-list">
-    <li id="no-template" class="template-item no-template-item">
-      <div class="template-name">No template</div>
-      <div class="template-preview">Send with current page URL only</div>
-    </li>
-  </ul>
-  <div class="footer">
-    <button class="set-completed-btn" id="set-completed-btn">Set Completed &rsaquo;</button>
-    <button class="options-link" id="options-link">Manage templates &rsaquo;</button>
+  <!-- View 1: email template selection -->
+  <div id="view-mail">
+    <h3>Select Mail Template</h3>
+    <ul id="template-list" class="template-list">
+      <li id="no-template" class="template-item no-template-item">
+        <div class="template-name">No template</div>
+        <div class="template-preview">Send with current page URL only</div>
+      </li>
+    </ul>
+    <div class="footer">
+      <button class="set-completed-btn" id="set-completed-btn">Set Completed &rsaquo;</button>
+      <button class="options-link" id="options-link">Manage templates &rsaquo;</button>
+    </div>
   </div>
+
+  <!-- View 2: completion comment selection -->
+  <div id="view-comment" style="display:none">
+    <h3>Add Completion Comment</h3>
+    <ul id="comment-template-list" class="template-list">
+      <li id="no-comment" class="template-item no-template-item">
+        <div class="template-name">No comment</div>
+        <div class="template-preview">Complete without adding a comment</div>
+      </li>
+    </ul>
+    <div class="footer">
+      <button class="options-link" id="back-btn">&#8592; Back</button>
+    </div>
+  </div>
+
   <div id="set-completed-status" class="status-msg"></div>
   <script src="popup.js"></script>
 </body>

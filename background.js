@@ -114,7 +114,8 @@ async function postTransition(baseUrl, issueKey, transitionId) {
 
 // Handles the setCompleted action: transitions the current issue to Completed,
 // going through In Progress first if the ticket is currently Assigned.
-async function handleSetCompleted(sendResponse) {
+// Optionally posts commentBody as a JIRA comment after the transitions.
+async function handleSetCompleted(commentBody, sendResponse) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
@@ -149,6 +150,16 @@ async function handleSetCompleted(sendResponse) {
       return;
     }
 
+    if (commentBody && commentBody.length > 0) {
+      const commentRes = await fetch(`${base}/issue/${issueKey}/comment`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: commentBody })
+      });
+      if (!commentRes.ok) throw new Error(`Failed to post comment (HTTP ${commentRes.status})`);
+    }
+
     sendResponse({ success: true });
   } catch (err) {
     sendResponse({ success: false, error: err.message });
@@ -158,7 +169,7 @@ async function handleSetCompleted(sendResponse) {
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
   if (message.action === 'setCompleted') {
-    handleSetCompleted(sendResponse);
+    handleSetCompleted(message.commentBody || '', sendResponse);
     return true; // keep channel open for async response
   }
 
