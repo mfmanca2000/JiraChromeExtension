@@ -55,20 +55,20 @@
       margin-left: 8px;
       flex-shrink: 0;
     }
-    #template-form {
+    .template-form-panel {
       border: 1px solid #aaa;
       border-radius: 4px;
       padding: 10px;
       margin-top: 8px;
       background: #f0f4ff;
     }
-    #template-form label {
+    .template-form-panel label {
       display: block;
       font-weight: bold;
       margin-bottom: 2px;
     }
-    #template-form input[type="text"],
-    #template-form textarea {
+    .template-form-panel input[type="text"],
+    .template-form-panel textarea {
       width: 100%;
       box-sizing: border-box;
       font-family: inherit;
@@ -76,7 +76,7 @@
       padding: 4px;
       margin-bottom: 8px;
     }
-    #template-form textarea {
+    .template-form-panel textarea {
       height: 110px;
       resize: vertical;
     }
@@ -151,7 +151,7 @@
     </p>
     <div id="template-list"></div>
     <button class="btn" id="add-template-btn">+ Add Template</button>
-    <div id="template-form" style="display:none">
+    <div id="template-form" class="template-form-panel" style="display:none">
       <input type="hidden" id="form-edit-id" value="">
       <label for="form-name">Name</label>
       <input type="text" id="form-name" placeholder="e.g. Initial Response">
@@ -164,6 +164,28 @@
       </div>
     </div>
   </div>
+
+  <div class="section">
+    <div class="section-title">INC Resolution Templates</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Predefined texts for the INC Resolution field, used when completing a ticket with Set Completed.
+    </p>
+    <div id="inc-resolution-list"></div>
+    <button class="btn" id="add-inc-resolution-btn" style="margin-top:4px">+ Add Template</button>
+    <div id="inc-resolution-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="inc-resolution-edit-id" value="">
+      <label for="inc-resolution-name">Name</label>
+      <input type="text" id="inc-resolution-name" placeholder="e.g. Issue Resolved">
+      <label for="inc-resolution-body">INC Resolution text</label>
+      <textarea id="inc-resolution-body" placeholder="Enter the INC Resolution text..."></textarea>
+      <div>
+        <button class="btn btn-primary" id="inc-resolution-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="inc-resolution-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>

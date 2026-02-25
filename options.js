@@ -14,6 +14,8 @@ function toggle(radioButton) {
 }
 
 function main() {
+  renderIncResolutionTemplates();
+
   // Check for stored preference
   chrome.storage.local.get('customMailtoUrl', function (result) {
     if (chrome.runtime.lastError) {
@@ -155,4 +157,115 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('add-template-btn').addEventListener('click', openAddForm);
   document.getElementById('form-save-btn').addEventListener('click', saveForm);
   document.getElementById('form-cancel-btn').addEventListener('click', cancelForm);
+  document.getElementById('add-inc-resolution-btn').addEventListener('click', openAddIncResolutionForm);
+  document.getElementById('inc-resolution-save-btn').addEventListener('click', saveIncResolutionForm);
+  document.getElementById('inc-resolution-cancel-btn').addEventListener('click', cancelIncResolutionForm);
 });
+
+// ---- INC Resolution template management ----
+
+function loadIncResolutionTemplates(callback) {
+  chrome.storage.local.get('incResolutionTemplates', function (result) {
+    callback(result.incResolutionTemplates || []);
+  });
+}
+
+function saveIncResolutionTemplates(templates) {
+  chrome.storage.local.set({ 'incResolutionTemplates': templates });
+}
+
+function renderIncResolutionTemplates() {
+  loadIncResolutionTemplates(function (templates) {
+    var container = document.getElementById('inc-resolution-list');
+    container.innerHTML = '';
+
+    if (templates.length === 0) {
+      container.innerHTML = '<p class="no-templates-msg">No templates yet.</p>';
+      return;
+    }
+
+    templates.forEach(function (template, index) {
+      var entry = document.createElement('div');
+      entry.className = 'template-entry';
+      entry.innerHTML =
+        '<div class="template-entry-info">' +
+          '<div class="template-entry-name">' + escapeHtml(template.name) + '</div>' +
+          '<div class="template-entry-preview">' +
+            escapeHtml(template.body.substring(0, 100)) +
+            (template.body.length > 100 ? '...' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="template-entry-actions">' +
+          '<button class="btn btn-sm" data-index="' + index + '" data-action="edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-index="' + index + '" data-action="delete">Delete</button>' +
+        '</div>';
+      container.appendChild(entry);
+    });
+
+    container.querySelectorAll('button[data-action="edit"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openEditIncResolutionForm(parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('button[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        deleteIncResolutionTemplate(parseInt(btn.dataset.index));
+      });
+    });
+  });
+}
+
+function openAddIncResolutionForm() {
+  document.getElementById('inc-resolution-edit-id').value = '';
+  document.getElementById('inc-resolution-name').value = '';
+  document.getElementById('inc-resolution-body').value = '';
+  document.getElementById('inc-resolution-form').style.display = 'block';
+  document.getElementById('inc-resolution-name').focus();
+}
+
+function openEditIncResolutionForm(index) {
+  loadIncResolutionTemplates(function (templates) {
+    var t = templates[index];
+    document.getElementById('inc-resolution-edit-id').value = String(index);
+    document.getElementById('inc-resolution-name').value = t.name;
+    document.getElementById('inc-resolution-body').value = t.body;
+    document.getElementById('inc-resolution-form').style.display = 'block';
+    document.getElementById('inc-resolution-name').focus();
+  });
+}
+
+function saveIncResolutionForm() {
+  var name = document.getElementById('inc-resolution-name').value.trim();
+  var body = document.getElementById('inc-resolution-body').value;
+  var editId = document.getElementById('inc-resolution-edit-id').value;
+
+  if (!name) {
+    alert('Please enter a template name.');
+    return;
+  }
+
+  loadIncResolutionTemplates(function (templates) {
+    if (editId === '') {
+      templates.push({ id: String(Date.now()), name: name, body: body });
+    } else {
+      var idx = parseInt(editId);
+      templates[idx] = { id: templates[idx].id, name: name, body: body };
+    }
+    saveIncResolutionTemplates(templates);
+    document.getElementById('inc-resolution-form').style.display = 'none';
+    renderIncResolutionTemplates();
+  });
+}
+
+function cancelIncResolutionForm() {
+  document.getElementById('inc-resolution-form').style.display = 'none';
+}
+
+function deleteIncResolutionTemplate(index) {
+  loadIncResolutionTemplates(function (templates) {
+    templates.splice(index, 1);
+    saveIncResolutionTemplates(templates);
+    renderIncResolutionTemplates();
+  });
+}
