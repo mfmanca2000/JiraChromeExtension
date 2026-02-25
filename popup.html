@@ -49,8 +49,10 @@
       background-color: #f9f9f9;
     }
     .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-top: 6px;
-      text-align: right;
     }
     .options-link {
       font-size: 11px;
@@ -64,6 +66,28 @@
     .options-link:hover {
       text-decoration: underline;
     }
+    .set-completed-btn {
+      font-size: 11px;
+      color: #fff;
+      background-color: #4285f4;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+    .set-completed-btn:hover {
+      background-color: #3367d6;
+    }
+    .set-completed-btn:disabled {
+      background-color: #aaa;
+      cursor: default;
+    }
+    .status-msg {
+      font-size: 11px;
+      margin-top: 4px;
+      text-align: center;
+      min-height: 14px;
+    }
   </style>
 </head>
 <body>
@@ -75,8 +99,10 @@
     </li>
   </ul>
   <div class="footer">
+    <button class="set-completed-btn" id="set-completed-btn">Set Completed &rsaquo;</button>
     <button class="options-link" id="options-link">Manage templates &rsaquo;</button>
   </div>
+  <div id="set-completed-status" class="status-msg"></div>
   <script src="popup.js"></script>
 </body>
 </html>

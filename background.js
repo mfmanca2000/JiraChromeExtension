@@ -82,8 +82,86 @@ chrome.runtime.onConnect.addListener(function (port) {
   });
 });
 
+// Extracts the JIRA issue key (e.g. "PROJ-123") from a JIRA browse URL.
+function extractIssueKey(url) {
+  const match = url.match(/\/browse\/([A-Z]+-\d+)/i);
+  return match ? match[1] : null;
+}
+
+// Fetches available transitions for an issue and returns the ID of the one
+// whose target status matches targetStatusName.
+async function getTransitionId(baseUrl, issueKey, targetStatusName) {
+  const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
+    credentials: 'include'
+  });
+  if (!res.ok) throw new Error(`Could not fetch transitions (HTTP ${res.status})`);
+  const data = await res.json();
+  const t = data.transitions.find(t => t.to.name === targetStatusName);
+  if (!t) throw new Error(`Transition to "${targetStatusName}" not available`);
+  return t.id;
+}
+
+// Posts a transition to move the issue to a new status.
+async function postTransition(baseUrl, issueKey, transitionId) {
+  const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transition: { id: transitionId } })
+  });
+  if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
+}
+
+// Handles the setCompleted action: transitions the current issue to Completed,
+// going through In Progress first if the ticket is currently Assigned.
+async function handleSetCompleted(sendResponse) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    const issueKey = extractIssueKey(tab.url);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Not a JIRA issue page' });
+      return;
+    }
+
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+
+    const issueRes = await fetch(`${base}/issue/${issueKey}?fields=status`, {
+      credentials: 'include'
+    });
+    if (!issueRes.ok) throw new Error(`Could not fetch issue (HTTP ${issueRes.status})`);
+    const issueData = await issueRes.json();
+    const status = issueData.fields.status.name;
+
+    if (status === 'Assigned') {
+      const tid1 = await getTransitionId(base, issueKey, 'In Progress');
+      await postTransition(base, issueKey, tid1);
+      const tid2 = await getTransitionId(base, issueKey, 'Completed');
+      await postTransition(base, issueKey, tid2);
+    } else if (status === 'In Progress') {
+      const tid = await getTransitionId(base, issueKey, 'Completed');
+      await postTransition(base, issueKey, tid);
+    } else if (status === 'Completed') {
+      sendResponse({ success: false, error: 'Ticket is already Completed' });
+      return;
+    } else {
+      sendResponse({ success: false, error: `Cannot complete from status "${status}"` });
+      return;
+    }
+
+    sendResponse({ success: true });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 // Handles the sendMail message sent from popup.js when the user picks a template.
-chrome.runtime.onMessage.addListener(function (message) {
+chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+  if (message.action === 'setCompleted') {
+    handleSetCompleted(sendResponse);
+    return true; // keep channel open for async response
+  }
+
   if (message.action === 'sendMail') {
     pendingTemplateBody = message.templateBody;
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
