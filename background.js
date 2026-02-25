@@ -102,40 +102,22 @@ async function getTransitionId(baseUrl, issueKey, targetStatusName) {
 }
 
 // Posts a transition to move the issue to a new status.
-// If resolutionName is provided it is included in the transition fields,
-// which sets the JIRA Resolution when the transition screen supports it.
-async function postTransition(baseUrl, issueKey, transitionId, resolutionName) {
-  const body = { transition: { id: transitionId } };
-  if (resolutionName && resolutionName.length > 0) {
-    body.fields = { resolution: { name: resolutionName } };
-  }
+async function postTransition(baseUrl, issueKey, transitionId) {
   const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ transition: { id: transitionId } })
   });
   if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
 }
 
-// Fetches the available JIRA resolutions (e.g. Fixed, Won't Fix, Done).
-async function handleGetResolutions(sendResponse) {
-  try {
-    const res = await fetch('https://issue.swisscom.ch/rest/api/2/resolution', {
-      credentials: 'include'
-    });
-    if (!res.ok) throw new Error(`Could not fetch resolutions (HTTP ${res.status})`);
-    const data = await res.json();
-    sendResponse({ success: true, resolutions: data.map(r => ({ id: r.id, name: r.name })) });
-  } catch (err) {
-    sendResponse({ success: false, error: err.message });
-  }
-}
-
 // Handles the setCompleted action: transitions the current issue to Completed,
 // going through In Progress first if the ticket is currently Assigned.
-// If resolutionName is provided it is set on the final Completed transition.
-async function handleSetCompleted(resolutionName, sendResponse) {
+// After transitioning, sets "INC Status Reason" = "No Further Action Required"
+// and optionally sets "INC Resolution" to the provided incResolution text.
+// Field IDs are looked up dynamically by name from GET /rest/api/2/field.
+async function handleSetCompleted(incResolution, sendResponse) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
@@ -158,10 +140,10 @@ async function handleSetCompleted(resolutionName, sendResponse) {
       const tid1 = await getTransitionId(base, issueKey, 'In Progress');
       await postTransition(base, issueKey, tid1);
       const tid2 = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid2, resolutionName);
+      await postTransition(base, issueKey, tid2);
     } else if (status === 'In Progress') {
       const tid = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid, resolutionName);
+      await postTransition(base, issueKey, tid);
     } else if (status === 'Completed') {
       sendResponse({ success: false, error: 'Ticket is already Completed' });
       return;
@@ -169,6 +151,31 @@ async function handleSetCompleted(resolutionName, sendResponse) {
       sendResponse({ success: false, error: `Cannot complete from status "${status}"` });
       return;
     }
+
+    // Look up custom field IDs by name
+    const fieldsRes = await fetch(`${base}/field`, { credentials: 'include' });
+    if (!fieldsRes.ok) throw new Error(`Could not fetch fields (HTTP ${fieldsRes.status})`);
+    const allFields = await fieldsRes.json();
+
+    const statusReasonField = allFields.find(f => f.name === 'INC Status Reason');
+    const resolutionField = allFields.find(f => f.name === 'INC Resolution');
+    if (!statusReasonField) throw new Error('Field "INC Status Reason" not found in JIRA');
+    if (!resolutionField) throw new Error('Field "INC Resolution" not found in JIRA');
+
+    // Build update body: INC Status Reason is always set; INC Resolution only if provided
+    const updateFields = {};
+    updateFields[statusReasonField.id] = { value: 'No Further Action Required' };
+    if (incResolution && incResolution.length > 0) {
+      updateFields[resolutionField.id] = incResolution;
+    }
+
+    const putRes = await fetch(`${base}/issue/${issueKey}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: updateFields })
+    });
+    if (!putRes.ok) throw new Error(`Failed to update INC fields (HTTP ${putRes.status})`);
 
     sendResponse({ success: true });
   } catch (err) {
@@ -178,13 +185,8 @@ async function handleSetCompleted(resolutionName, sendResponse) {
 
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
-  if (message.action === 'getResolutions') {
-    handleGetResolutions(sendResponse);
-    return true;
-  }
-
   if (message.action === 'setCompleted') {
-    handleSetCompleted(message.resolutionName || '', sendResponse);
+    handleSetCompleted(message.incResolution || '', sendResponse);
     return true; // keep channel open for async response
   }
 
