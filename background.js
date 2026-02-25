@@ -102,20 +102,40 @@ async function getTransitionId(baseUrl, issueKey, targetStatusName) {
 }
 
 // Posts a transition to move the issue to a new status.
-async function postTransition(baseUrl, issueKey, transitionId) {
+// If resolutionName is provided it is included in the transition fields,
+// which sets the JIRA Resolution when the transition screen supports it.
+async function postTransition(baseUrl, issueKey, transitionId, resolutionName) {
+  const body = { transition: { id: transitionId } };
+  if (resolutionName && resolutionName.length > 0) {
+    body.fields = { resolution: { name: resolutionName } };
+  }
   const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transition: { id: transitionId } })
+    body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
 }
 
+// Fetches the available JIRA resolutions (e.g. Fixed, Won't Fix, Done).
+async function handleGetResolutions(sendResponse) {
+  try {
+    const res = await fetch('https://issue.swisscom.ch/rest/api/2/resolution', {
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error(`Could not fetch resolutions (HTTP ${res.status})`);
+    const data = await res.json();
+    sendResponse({ success: true, resolutions: data.map(r => ({ id: r.id, name: r.name })) });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 // Handles the setCompleted action: transitions the current issue to Completed,
 // going through In Progress first if the ticket is currently Assigned.
-// Optionally posts commentBody as a JIRA comment after the transitions.
-async function handleSetCompleted(commentBody, sendResponse) {
+// If resolutionName is provided it is set on the final Completed transition.
+async function handleSetCompleted(resolutionName, sendResponse) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
@@ -138,26 +158,16 @@ async function handleSetCompleted(commentBody, sendResponse) {
       const tid1 = await getTransitionId(base, issueKey, 'In Progress');
       await postTransition(base, issueKey, tid1);
       const tid2 = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid2);
+      await postTransition(base, issueKey, tid2, resolutionName);
     } else if (status === 'In Progress') {
       const tid = await getTransitionId(base, issueKey, 'Completed');
-      await postTransition(base, issueKey, tid);
+      await postTransition(base, issueKey, tid, resolutionName);
     } else if (status === 'Completed') {
       sendResponse({ success: false, error: 'Ticket is already Completed' });
       return;
     } else {
       sendResponse({ success: false, error: `Cannot complete from status "${status}"` });
       return;
-    }
-
-    if (commentBody && commentBody.length > 0) {
-      const commentRes = await fetch(`${base}/issue/${issueKey}/comment`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: commentBody })
-      });
-      if (!commentRes.ok) throw new Error(`Failed to post comment (HTTP ${commentRes.status})`);
     }
 
     sendResponse({ success: true });
@@ -168,8 +178,13 @@ async function handleSetCompleted(commentBody, sendResponse) {
 
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+  if (message.action === 'getResolutions') {
+    handleGetResolutions(sendResponse);
+    return true;
+  }
+
   if (message.action === 'setCompleted') {
-    handleSetCompleted(message.commentBody || '', sendResponse);
+    handleSetCompleted(message.resolutionName || '', sendResponse);
     return true; // keep channel open for async response
   }
 

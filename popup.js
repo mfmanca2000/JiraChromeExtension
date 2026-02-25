@@ -1,64 +1,70 @@
 document.addEventListener('DOMContentLoaded', function () {
   var viewMail = document.getElementById('view-mail');
-  var viewComment = document.getElementById('view-comment');
+  var viewResolution = document.getElementById('view-resolution');
   var templateList = document.getElementById('template-list');
   var noTemplateItem = document.getElementById('no-template');
   var optionsLink = document.getElementById('options-link');
   var setCompletedBtn = document.getElementById('set-completed-btn');
-  var commentTemplateList = document.getElementById('comment-template-list');
-  var noCommentItem = document.getElementById('no-comment');
+  var resolutionList = document.getElementById('resolution-list');
+  var noResolutionItem = document.getElementById('no-resolution');
   var backBtn = document.getElementById('back-btn');
   var setCompletedStatus = document.getElementById('set-completed-status');
 
-  // -- Set Completed: open comment template picker --
+  // -- Set Completed: fetch resolutions from JIRA, then show picker --
 
   setCompletedBtn.addEventListener('click', function () {
     setCompletedStatus.textContent = '';
-    chrome.storage.local.get('completionTemplates', function (result) {
-      var templates = result.completionTemplates || [];
+    setCompletedBtn.disabled = true;
+    setCompletedStatus.style.color = '#555';
+    setCompletedStatus.textContent = 'Loading resolutions\u2026';
 
-      // Rebuild list keeping "No comment" as the first item
-      while (commentTemplateList.children.length > 1) {
-        commentTemplateList.removeChild(commentTemplateList.lastChild);
+    chrome.runtime.sendMessage({ action: 'getResolutions' }, function (response) {
+      setCompletedBtn.disabled = false;
+      setCompletedStatus.textContent = '';
+
+      if (!response || !response.success) {
+        setCompletedStatus.style.color = 'red';
+        setCompletedStatus.textContent = (response && response.error) ? response.error : 'Could not load resolutions';
+        return;
       }
-      templates.forEach(function (template) {
+
+      // Rebuild list keeping "No resolution" as the first item
+      while (resolutionList.children.length > 1) {
+        resolutionList.removeChild(resolutionList.lastChild);
+      }
+      response.resolutions.forEach(function (resolution) {
         var li = document.createElement('li');
         li.className = 'template-item';
-        li.innerHTML =
-          '<div class="template-name">' + escapeHtml(template.name) + '</div>' +
-          '<div class="template-preview">' +
-            escapeHtml(template.body.substring(0, 70)) +
-            (template.body.length > 70 ? '...' : '') +
-          '</div>';
+        li.innerHTML = '<div class="template-name">' + escapeHtml(resolution.name) + '</div>';
         li.addEventListener('click', function () {
-          triggerSetCompleted(template.body);
+          triggerSetCompleted(resolution.name);
         });
-        commentTemplateList.appendChild(li);
+        resolutionList.appendChild(li);
       });
 
       viewMail.style.display = 'none';
-      viewComment.style.display = 'block';
+      viewResolution.style.display = 'block';
     });
   });
 
-  noCommentItem.addEventListener('click', function () {
+  noResolutionItem.addEventListener('click', function () {
     triggerSetCompleted('');
   });
 
   backBtn.addEventListener('click', function () {
-    viewComment.style.display = 'none';
+    viewResolution.style.display = 'none';
     viewMail.style.display = 'block';
     setCompletedStatus.textContent = '';
   });
 
-  function triggerSetCompleted(commentBody) {
-    viewComment.style.display = 'none';
+  function triggerSetCompleted(resolutionName) {
+    viewResolution.style.display = 'none';
     viewMail.style.display = 'block';
     setCompletedBtn.disabled = true;
     setCompletedStatus.style.color = '#555';
     setCompletedStatus.textContent = 'Working\u2026';
 
-    chrome.runtime.sendMessage({ action: 'setCompleted', commentBody: commentBody }, function (response) {
+    chrome.runtime.sendMessage({ action: 'setCompleted', resolutionName: resolutionName }, function (response) {
       if (response && response.success) {
         setCompletedStatus.style.color = 'green';
         setCompletedStatus.textContent = 'Status updated successfully!';
