@@ -116,9 +116,9 @@ async function postTransition(baseUrl, issueKey, transitionId, fields) {
   if (!res.ok) throw new Error(`Transition failed (HTTP ${res.status})`);
 }
 
-// Handles the setCompleted action: transitions the current issue to Completed,
+// Handles the setCompleted action: transitions the current issue to Resolved,
 // going through In Progress first if the ticket is currently Assigned.
-// "INC Status Reason" and "INC Resolution" are passed inside the Completed
+// "INC Status Reason" and "INC Resolution" are passed inside the Resolved
 // transition POST because they are mandatory fields on the transition screen.
 // Field IDs are looked up dynamically by name from GET /rest/api/2/field.
 async function handleSetCompleted(incResolution, sendResponse) {
@@ -141,14 +141,14 @@ async function handleSetCompleted(incResolution, sendResponse) {
     const status = issueData.fields.status.name;
 
     if (status !== 'Assigned' && status !== 'In Progress') {
-      const msg = status === 'Completed' ? 'Ticket is already Completed'
-                                         : `Cannot complete from status "${status}"`;
+      const msg = status === 'Resolved' ? 'Ticket is already Resolved'
+                                        : `Cannot resolve from status "${status}"`;
       sendResponse({ success: false, error: msg });
       return;
     }
 
     // Look up custom field IDs before transitioning so they can be
-    // included as mandatory fields in the Completed transition POST.
+    // included as mandatory fields in the Resolved transition POST.
     const fieldsRes = await fetch(`${base}/field`, { credentials: 'include' });
     if (!fieldsRes.ok) throw new Error(`Could not fetch fields (HTTP ${fieldsRes.status})`);
     const allFields = await fieldsRes.json();
@@ -167,10 +167,10 @@ async function handleSetCompleted(incResolution, sendResponse) {
     if (status === 'Assigned') {
       const tid1 = await getTransitionId(base, issueKey, 'In Progress');
       await postTransition(base, issueKey, tid1);
-      const tid2 = await getTransitionId(base, issueKey, 'Completed');
+      const tid2 = await getTransitionId(base, issueKey, 'Resolved');
       await postTransition(base, issueKey, tid2, completionFields);
     } else {
-      const tid = await getTransitionId(base, issueKey, 'Completed');
+      const tid = await getTransitionId(base, issueKey, 'Resolved');
       await postTransition(base, issueKey, tid, completionFields);
     }
 
