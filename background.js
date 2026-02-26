@@ -48,14 +48,41 @@ async function executeMailto(tab_id, to, subject, body, selection) {
 // Stores the template body chosen in the popup until the content script responds.
 let pendingTemplateBody = null;
 
+// Stores a pending copyId callback until the content script responds.
+let pendingCopyIdCallback = null;
+
 chrome.runtime.onConnect.addListener(function (port) {
   var tab = port.sender.tab;
   const templateBody = pendingTemplateBody;
   pendingTemplateBody = null;
+  const copyIdCallback = pendingCopyIdCallback;
+  pendingCopyIdCallback = null;
 
   // This will get called by the content script we execute in
   // the tab as a result of the user pressing the browser action.
   port.onMessage.addListener(function (info) {
+    // Handle copyId action: just copy the ID to clipboard and respond.
+    if (copyIdCallback) {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (text) => {
+          var copyFrom = document.createElement("textarea");
+          copyFrom.textContent = text;
+          document.body.appendChild(copyFrom);
+          copyFrom.select();
+          document.execCommand('copy');
+          copyFrom.blur();
+          document.body.removeChild(copyFrom);
+        },
+        args: [info.itsm + ":" + info.op]
+      }).then(() => {
+        copyIdCallback({ success: true });
+      }).catch((err) => {
+        copyIdCallback({ success: false, error: err.message });
+      });
+      return;
+    }
+
     var max_length = 1024;
 
     if (info.selection.length > max_length)
@@ -186,6 +213,22 @@ async function handleSetCompleted(incResolution, sendResponse) {
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
   if (message.action === 'setCompleted') {
     handleSetCompleted(message.incResolution || '', sendResponse);
+    return true; // keep channel open for async response
+  }
+
+  if (message.action === 'copyId') {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      const tab = tabs[0];
+      if (!tab || tab.url.indexOf("https://issue.swisscom.ch") !== 0) {
+        sendResponse({ success: false, error: 'Not a JIRA issue page' });
+        return;
+      }
+      pendingCopyIdCallback = sendResponse;
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content_script.js"]
+      });
+    });
     return true; // keep channel open for async response
   }
 

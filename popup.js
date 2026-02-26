@@ -9,6 +9,24 @@ document.addEventListener('DOMContentLoaded', function () {
   var noResolutionItem = document.getElementById('no-resolution');
   var backBtn = document.getElementById('back-btn');
   var setCompletedStatus = document.getElementById('set-completed-status');
+  var copyIdBtn = document.getElementById('copy-id-btn');
+
+  // -- Copy ID to clipboard --
+
+  copyIdBtn.addEventListener('click', function () {
+    copyIdBtn.disabled = true;
+    chrome.runtime.sendMessage({ action: 'copyId' }, function (response) {
+      if (response && response.success) {
+        setCompletedStatus.style.color = 'green';
+        setCompletedStatus.textContent = 'ID copied!';
+        setTimeout(function () { window.close(); }, 800);
+      } else {
+        setCompletedStatus.style.color = 'red';
+        setCompletedStatus.textContent = (response && response.error) ? response.error : 'Copy failed';
+        copyIdBtn.disabled = false;
+      }
+    });
+  });
 
   // -- Set Completed: load INC Resolution templates, then show picker --
 
