@@ -66,9 +66,13 @@ chrome.runtime.onConnect.addListener(function (port) {
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: (text) => {
-          return navigator.clipboard.writeText(text)
-            .then(() => true)
-            .catch(() => false);
+          var copyFrom = document.createElement("textarea");
+          copyFrom.textContent = text;
+          document.body.appendChild(copyFrom);
+          copyFrom.select();
+          document.execCommand('copy');
+          copyFrom.blur();
+          document.body.removeChild(copyFrom);
         },
         args: [info.itsm + ":" + info.op]
       }).then(() => {
