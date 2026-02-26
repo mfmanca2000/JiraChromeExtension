@@ -45,6 +45,27 @@ async function executeMailto(tab_id, to, subject, body, selection) {
   }
 }
 
+// Copies text to the clipboard inside the given tab.
+// Tries the modern Clipboard API first; falls back to execCommand when the
+// tab's document does not have focus (e.g. while the popup is open).
+function copyTextInTab(tabId, text) {
+  return chrome.scripting.executeScript({
+    target: { tabId },
+    func: (t) => {
+      return navigator.clipboard.writeText(t).catch(() => {
+        const el = document.createElement('textarea');
+        el.value = t;
+        document.body.appendChild(el);
+        el.select();
+        // execCommand is deprecated but used here as a focus-independent fallback.
+        document.execCommand('copy'); // eslint-disable-line no-document-execcommand
+        document.body.removeChild(el);
+      });
+    },
+    args: [text]
+  });
+}
+
 // Stores the template body chosen in the popup until the content script responds.
 let pendingTemplateBody = null;
 
@@ -63,23 +84,9 @@ chrome.runtime.onConnect.addListener(function (port) {
   port.onMessage.addListener(function (info) {
     // Handle copyId action: just copy the ID to clipboard and respond.
     if (copyIdCallback) {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (text) => {
-          var copyFrom = document.createElement("textarea");
-          copyFrom.textContent = text;
-          document.body.appendChild(copyFrom);
-          copyFrom.select();
-          document.execCommand('copy');
-          copyFrom.blur();
-          document.body.removeChild(copyFrom);
-        },
-        args: [info.itsm + ":" + info.op]
-      }).then(() => {
-        copyIdCallback({ success: true });
-      }).catch((err) => {
-        copyIdCallback({ success: false, error: err.message });
-      });
+      copyTextInTab(tab.id, info.itsm + ":" + info.op)
+        .then(() => copyIdCallback({ success: true }))
+        .catch((err) => copyIdCallback({ success: false, error: err.message }));
       return;
     }
 
@@ -96,16 +103,7 @@ chrome.runtime.onConnect.addListener(function (port) {
 
     executeMailto(tab.id, info.mailto, info.title, body, info.selection);
 
-    // Copy to clipboard using modern clipboard API in content script context
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (text) => {
-        navigator.clipboard.writeText(text)
-          .then(() => console.log('Copied to clipboard:', text))
-          .catch(err => console.error('Failed to copy:', err));
-      },
-      args: [info.itsm + ":" + info.op]
-    });
+    copyTextInTab(tab.id, info.itsm + ":" + info.op);
   });
 });
 
