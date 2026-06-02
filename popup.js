@@ -10,12 +10,56 @@ document.addEventListener('DOMContentLoaded', function () {
   var backBtn = document.getElementById('back-btn');
   var setCompletedStatus = document.getElementById('set-completed-status');
   var copyIdBtn = document.getElementById('copy-id-btn');
+  var viewCopyId = document.getElementById('view-copy-id');
+  var copyIdCommentList = document.getElementById('copy-id-comment-list');
+  var noCopyIdCommentItem = document.getElementById('no-copy-id-comment');
+  var backCopyIdBtn = document.getElementById('back-copy-id-btn');
 
-  // -- Copy ID to clipboard --
+  // -- Copy ID: load comment templates, then show picker --
 
   copyIdBtn.addEventListener('click', function () {
+    setCompletedStatus.textContent = '';
+    chrome.storage.local.get('copyIdComments', function (result) {
+      var comments = result.copyIdComments || [];
+
+      while (copyIdCommentList.children.length > 1) {
+        copyIdCommentList.removeChild(copyIdCommentList.lastChild);
+      }
+      comments.forEach(function (comment) {
+        var li = document.createElement('li');
+        li.className = 'template-item';
+        li.innerHTML =
+          '<div class="template-name">' + escapeHtml(comment.name) + '</div>' +
+          '<div class="template-preview">' +
+            escapeHtml(comment.body.substring(0, 70)) +
+            (comment.body.length > 70 ? '...' : '') +
+          '</div>';
+        li.addEventListener('click', function () {
+          triggerCopyId(comment.body);
+        });
+        copyIdCommentList.appendChild(li);
+      });
+
+      viewMail.style.display = 'none';
+      viewCopyId.style.display = 'block';
+    });
+  });
+
+  noCopyIdCommentItem.addEventListener('click', function () {
+    triggerCopyId('');
+  });
+
+  backCopyIdBtn.addEventListener('click', function () {
+    viewCopyId.style.display = 'none';
+    viewMail.style.display = 'block';
+    setCompletedStatus.textContent = '';
+  });
+
+  function triggerCopyId(suffix) {
+    viewCopyId.style.display = 'none';
+    viewMail.style.display = 'block';
     copyIdBtn.disabled = true;
-    chrome.runtime.sendMessage({ action: 'copyId' }, function (response) {
+    chrome.runtime.sendMessage({ action: 'copyId', suffix: suffix }, function (response) {
       if (response && response.success) {
         setCompletedStatus.style.color = 'green';
         setCompletedStatus.textContent = 'ID copied!';
@@ -26,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function () {
         copyIdBtn.disabled = false;
       }
     });
-  });
+  }
 
   // -- Set Completed: load INC Resolution templates, then show picker --
 

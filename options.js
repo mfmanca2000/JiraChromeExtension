@@ -15,6 +15,7 @@ function toggle(radioButton) {
 
 function main() {
   renderIncResolutionTemplates();
+  renderCopyIdComments();
 
   // Check for stored preference
   chrome.storage.local.get('customMailtoUrl', function (result) {
@@ -160,6 +161,9 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('add-inc-resolution-btn').addEventListener('click', openAddIncResolutionForm);
   document.getElementById('inc-resolution-save-btn').addEventListener('click', saveIncResolutionForm);
   document.getElementById('inc-resolution-cancel-btn').addEventListener('click', cancelIncResolutionForm);
+  document.getElementById('add-copy-id-comment-btn').addEventListener('click', openAddCopyIdCommentForm);
+  document.getElementById('copy-id-comment-save-btn').addEventListener('click', saveCopyIdCommentForm);
+  document.getElementById('copy-id-comment-cancel-btn').addEventListener('click', cancelCopyIdCommentForm);
 });
 
 // ---- INC Resolution template management ----
@@ -267,5 +271,113 @@ function deleteIncResolutionTemplate(index) {
     templates.splice(index, 1);
     saveIncResolutionTemplates(templates);
     renderIncResolutionTemplates();
+  });
+}
+
+// ---- Copy ID Comments management ----
+
+function loadCopyIdComments(callback) {
+  chrome.storage.local.get('copyIdComments', function (result) {
+    callback(result.copyIdComments || []);
+  });
+}
+
+function saveCopyIdComments(comments) {
+  chrome.storage.local.set({ 'copyIdComments': comments });
+}
+
+function renderCopyIdComments() {
+  loadCopyIdComments(function (comments) {
+    var container = document.getElementById('copy-id-comment-list');
+    container.innerHTML = '';
+
+    if (comments.length === 0) {
+      container.innerHTML = '<p class="no-templates-msg">No comments yet.</p>';
+      return;
+    }
+
+    comments.forEach(function (comment, index) {
+      var entry = document.createElement('div');
+      entry.className = 'template-entry';
+      entry.innerHTML =
+        '<div class="template-entry-info">' +
+          '<div class="template-entry-name">' + escapeHtml(comment.name) + '</div>' +
+          '<div class="template-entry-preview">' +
+            escapeHtml(comment.body.substring(0, 100)) +
+            (comment.body.length > 100 ? '...' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="template-entry-actions">' +
+          '<button class="btn btn-sm" data-index="' + index + '" data-action="edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-index="' + index + '" data-action="delete">Delete</button>' +
+        '</div>';
+      container.appendChild(entry);
+    });
+
+    container.querySelectorAll('button[data-action="edit"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openEditCopyIdCommentForm(parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('button[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        deleteCopyIdComment(parseInt(btn.dataset.index));
+      });
+    });
+  });
+}
+
+function openAddCopyIdCommentForm() {
+  document.getElementById('copy-id-comment-edit-id').value = '';
+  document.getElementById('copy-id-comment-name').value = '';
+  document.getElementById('copy-id-comment-body').value = '';
+  document.getElementById('copy-id-comment-form').style.display = 'block';
+  document.getElementById('copy-id-comment-name').focus();
+}
+
+function openEditCopyIdCommentForm(index) {
+  loadCopyIdComments(function (comments) {
+    var c = comments[index];
+    document.getElementById('copy-id-comment-edit-id').value = String(index);
+    document.getElementById('copy-id-comment-name').value = c.name;
+    document.getElementById('copy-id-comment-body').value = c.body;
+    document.getElementById('copy-id-comment-form').style.display = 'block';
+    document.getElementById('copy-id-comment-name').focus();
+  });
+}
+
+function saveCopyIdCommentForm() {
+  var name = document.getElementById('copy-id-comment-name').value.trim();
+  var body = document.getElementById('copy-id-comment-body').value;
+  var editId = document.getElementById('copy-id-comment-edit-id').value;
+
+  if (!name) {
+    alert('Please enter a comment name.');
+    return;
+  }
+
+  loadCopyIdComments(function (comments) {
+    if (editId === '') {
+      comments.push({ id: String(Date.now()), name: name, body: body });
+    } else {
+      var idx = parseInt(editId);
+      comments[idx] = { id: comments[idx].id, name: name, body: body };
+    }
+    saveCopyIdComments(comments);
+    document.getElementById('copy-id-comment-form').style.display = 'none';
+    renderCopyIdComments();
+  });
+}
+
+function cancelCopyIdCommentForm() {
+  document.getElementById('copy-id-comment-form').style.display = 'none';
+}
+
+function deleteCopyIdComment(index) {
+  loadCopyIdComments(function (comments) {
+    comments.splice(index, 1);
+    saveCopyIdComments(comments);
+    renderCopyIdComments();
   });
 }
