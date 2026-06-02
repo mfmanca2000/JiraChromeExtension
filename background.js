@@ -72,19 +72,25 @@ let pendingTemplateBody = null;
 // Stores a pending copyId callback until the content script responds.
 let pendingCopyIdCallback = null;
 
+// Stores the suffix chosen in the popup for the pending copyId action.
+let pendingCopyIdSuffix = null;
+
 chrome.runtime.onConnect.addListener(function (port) {
   var tab = port.sender.tab;
   const templateBody = pendingTemplateBody;
   pendingTemplateBody = null;
   const copyIdCallback = pendingCopyIdCallback;
   pendingCopyIdCallback = null;
+  const copyIdSuffix = pendingCopyIdSuffix;
+  pendingCopyIdSuffix = null;
 
   // This will get called by the content script we execute in
   // the tab as a result of the user pressing the browser action.
   port.onMessage.addListener(function (info) {
-    // Handle copyId action: just copy the ID to clipboard and respond.
+    // Handle copyId action: copy the ID (with optional suffix) to clipboard and respond.
     if (copyIdCallback) {
-      copyTextInTab(tab.id, info.itsm + ":" + info.op)
+      const idText = info.itsm + ":" + info.op + (copyIdSuffix ? " " + copyIdSuffix : "");
+      copyTextInTab(tab.id, idText)
         .then(() => copyIdCallback({ success: true }))
         .catch((err) => copyIdCallback({ success: false, error: err.message }));
       return;
@@ -222,6 +228,7 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
         return;
       }
       pendingCopyIdCallback = sendResponse;
+      pendingCopyIdSuffix = message.suffix || '';
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ["content_script.js"]

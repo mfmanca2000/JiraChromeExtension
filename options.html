@@ -186,6 +186,27 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Copy ID Comments</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Predefined suffix texts appended to the incident ID when using Copy ID.
+    </p>
+    <div id="copy-id-comment-list"></div>
+    <button class="btn" id="add-copy-id-comment-btn" style="margin-top:4px">+ Add Comment</button>
+    <div id="copy-id-comment-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="copy-id-comment-edit-id" value="">
+      <label for="copy-id-comment-name">Name</label>
+      <input type="text" id="copy-id-comment-name" placeholder="e.g. Work Notes">
+      <label for="copy-id-comment-body">Comment text (suffix)</label>
+      <textarea id="copy-id-comment-body" placeholder="Enter the suffix text..."></textarea>
+      <div>
+        <button class="btn btn-primary" id="copy-id-comment-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="copy-id-comment-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>
