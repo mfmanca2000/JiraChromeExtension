@@ -187,6 +187,27 @@
   </div>
 
   <div class="section">
+    <div class="section-title">Label Templates</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Predefined labels applied to the ticket when using Add Label.
+    </p>
+    <div id="label-template-list"></div>
+    <button class="btn" id="add-label-template-btn" style="margin-top:4px">+ Add Template</button>
+    <div id="label-template-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="label-template-edit-id" value="">
+      <label for="label-template-name">Name</label>
+      <input type="text" id="label-template-name" placeholder="e.g. Awaiting Customer">
+      <label for="label-template-body">Label text</label>
+      <input type="text" id="label-template-body" placeholder="e.g. awaiting-customer (space-separated for multiple)">
+      <div>
+        <button class="btn btn-primary" id="label-template-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="label-template-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-title">Copy ID Comments</div>
     <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
       Predefined suffix texts appended to the incident ID when using Copy ID.

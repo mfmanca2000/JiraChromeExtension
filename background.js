@@ -132,12 +132,26 @@ async function getTransitionId(baseUrl, issueKey, targetStatusName) {
   return t.id;
 }
 
+// Like getTransitionId but matches by the transition's own name rather than target status.
+// Needed for transitions that stay in the same status (e.g. "Add Label" → Pending).
+async function getTransitionIdByName(baseUrl, issueKey, transitionName) {
+  const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
+    credentials: 'include'
+  });
+  if (!res.ok) throw new Error(`Could not fetch transitions (HTTP ${res.status})`);
+  const data = await res.json();
+  const t = data.transitions.find(t => t.name === transitionName);
+  if (!t) throw new Error(`Transition "${transitionName}" not available`);
+  return t.id;
+}
+
 // Posts a transition to move the issue to a new status.
 // Optional fields object is included in the POST body when provided
 // (required for mandatory transition-screen fields such as INC Status Reason).
-async function postTransition(baseUrl, issueKey, transitionId, fields) {
+async function postTransition(baseUrl, issueKey, transitionId, fields, update) {
   const body = { transition: { id: transitionId } };
   if (fields) body.fields = fields;
+  if (update) body.update = update;
   const res = await fetch(`${baseUrl}/issue/${issueKey}/transitions`, {
     method: 'POST',
     credentials: 'include',
@@ -213,8 +227,41 @@ async function handleSetCompleted(incResolution, sendResponse) {
   }
 }
 
+// Adds a label via the "Add Label" workflow transition (same pattern as handleSetCompleted).
+async function handleAddLabel(label, sendResponse) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    const issueKey = extractIssueKey(tab.url);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Not a JIRA issue page' });
+      return;
+    }
+
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+
+    const labels = label.trim().split(/\s+/).filter(Boolean).map(l => ({ add: l }));
+    if (labels.length === 0) {
+      sendResponse({ success: false, error: 'No label specified' });
+      return;
+    }
+    const transitionId = await getTransitionIdByName(base, issueKey, 'Add Label');
+    await postTransition(base, issueKey, transitionId, null, { labels });
+
+    sendResponse({ success: true });
+    chrome.tabs.reload(tab.id);
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+  if (message.action === 'addLabel') {
+    handleAddLabel(message.label, sendResponse);
+    return true; // keep channel open for async response
+  }
+
   if (message.action === 'setCompleted') {
     handleSetCompleted(message.incResolution || '', sendResponse);
     return true; // keep channel open for async response

@@ -9,11 +9,74 @@ document.addEventListener('DOMContentLoaded', function () {
   var noResolutionItem = document.getElementById('no-resolution');
   var backBtn = document.getElementById('back-btn');
   var setCompletedStatus = document.getElementById('set-completed-status');
+  var addLabelBtn = document.getElementById('add-label-btn');
+  var viewLabel = document.getElementById('view-label');
+  var labelList = document.getElementById('label-list');
+  var backLabelBtn = document.getElementById('back-label-btn');
   var copyIdBtn = document.getElementById('copy-id-btn');
   var viewCopyId = document.getElementById('view-copy-id');
   var copyIdCommentList = document.getElementById('copy-id-comment-list');
   var noCopyIdCommentItem = document.getElementById('no-copy-id-comment');
   var backCopyIdBtn = document.getElementById('back-copy-id-btn');
+
+  // -- Add Label: load label templates, then show picker --
+
+  addLabelBtn.addEventListener('click', function () {
+    setCompletedStatus.textContent = '';
+    chrome.storage.local.get('labelTemplates', function (result) {
+      var templates = result.labelTemplates || [];
+
+      labelList.innerHTML = '';
+      if (templates.length === 0) {
+        var li = document.createElement('li');
+        li.className = 'template-item no-template-item';
+        li.innerHTML = '<div class="template-name">No label templates</div>' +
+          '<div class="template-preview">Add templates in options</div>';
+        labelList.appendChild(li);
+      } else {
+        templates.forEach(function (template) {
+          var li = document.createElement('li');
+          li.className = 'template-item';
+          li.innerHTML =
+            '<div class="template-name">' + escapeHtml(template.name) + '</div>' +
+            '<div class="template-preview">' + escapeHtml(template.body) + '</div>';
+          li.addEventListener('click', function () {
+            triggerAddLabel(template.body);
+          });
+          labelList.appendChild(li);
+        });
+      }
+
+      viewMail.style.display = 'none';
+      viewLabel.style.display = 'block';
+    });
+  });
+
+  backLabelBtn.addEventListener('click', function () {
+    viewLabel.style.display = 'none';
+    viewMail.style.display = 'block';
+    setCompletedStatus.textContent = '';
+  });
+
+  function triggerAddLabel(label) {
+    viewLabel.style.display = 'none';
+    viewMail.style.display = 'block';
+    addLabelBtn.disabled = true;
+    setCompletedStatus.style.color = '#555';
+    setCompletedStatus.textContent = 'Working…';
+
+    chrome.runtime.sendMessage({ action: 'addLabel', label: label }, function (response) {
+      if (response && response.success) {
+        setCompletedStatus.style.color = 'green';
+        setCompletedStatus.textContent = 'Label added!';
+        setTimeout(function () { window.close(); }, 1000);
+      } else {
+        setCompletedStatus.style.color = 'red';
+        setCompletedStatus.textContent = (response && response.error) ? response.error : 'Unknown error';
+        addLabelBtn.disabled = false;
+      }
+    });
+  }
 
   // -- Copy ID: load comment templates, then show picker --
 

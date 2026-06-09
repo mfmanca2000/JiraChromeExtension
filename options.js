@@ -15,6 +15,7 @@ function toggle(radioButton) {
 
 function main() {
   renderIncResolutionTemplates();
+  renderLabelTemplates();
   renderCopyIdComments();
 
   // Check for stored preference
@@ -161,6 +162,9 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('add-inc-resolution-btn').addEventListener('click', openAddIncResolutionForm);
   document.getElementById('inc-resolution-save-btn').addEventListener('click', saveIncResolutionForm);
   document.getElementById('inc-resolution-cancel-btn').addEventListener('click', cancelIncResolutionForm);
+  document.getElementById('add-label-template-btn').addEventListener('click', openAddLabelTemplateForm);
+  document.getElementById('label-template-save-btn').addEventListener('click', saveLabelTemplateForm);
+  document.getElementById('label-template-cancel-btn').addEventListener('click', cancelLabelTemplateForm);
   document.getElementById('add-copy-id-comment-btn').addEventListener('click', openAddCopyIdCommentForm);
   document.getElementById('copy-id-comment-save-btn').addEventListener('click', saveCopyIdCommentForm);
   document.getElementById('copy-id-comment-cancel-btn').addEventListener('click', cancelCopyIdCommentForm);
@@ -271,6 +275,115 @@ function deleteIncResolutionTemplate(index) {
     templates.splice(index, 1);
     saveIncResolutionTemplates(templates);
     renderIncResolutionTemplates();
+  });
+}
+
+// ---- Label Templates management ----
+
+function loadLabelTemplates(callback) {
+  chrome.storage.local.get('labelTemplates', function (result) {
+    callback(result.labelTemplates || []);
+  });
+}
+
+function saveLabelTemplates(templates) {
+  chrome.storage.local.set({ 'labelTemplates': templates });
+}
+
+function renderLabelTemplates() {
+  loadLabelTemplates(function (templates) {
+    var container = document.getElementById('label-template-list');
+    container.innerHTML = '';
+
+    if (templates.length === 0) {
+      container.innerHTML = '<p class="no-templates-msg">No templates yet.</p>';
+      return;
+    }
+
+    templates.forEach(function (template, index) {
+      var entry = document.createElement('div');
+      entry.className = 'template-entry';
+      entry.innerHTML =
+        '<div class="template-entry-info">' +
+          '<div class="template-entry-name">' + escapeHtml(template.name) + '</div>' +
+          '<div class="template-entry-preview">' + escapeHtml(template.body) + '</div>' +
+        '</div>' +
+        '<div class="template-entry-actions">' +
+          '<button class="btn btn-sm" data-index="' + index + '" data-action="edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-index="' + index + '" data-action="delete">Delete</button>' +
+        '</div>';
+      container.appendChild(entry);
+    });
+
+    container.querySelectorAll('button[data-action="edit"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openEditLabelTemplateForm(parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('button[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        deleteLabelTemplate(parseInt(btn.dataset.index));
+      });
+    });
+  });
+}
+
+function openAddLabelTemplateForm() {
+  document.getElementById('label-template-edit-id').value = '';
+  document.getElementById('label-template-name').value = '';
+  document.getElementById('label-template-body').value = '';
+  document.getElementById('label-template-form').style.display = 'block';
+  document.getElementById('label-template-name').focus();
+}
+
+function openEditLabelTemplateForm(index) {
+  loadLabelTemplates(function (templates) {
+    var t = templates[index];
+    document.getElementById('label-template-edit-id').value = String(index);
+    document.getElementById('label-template-name').value = t.name;
+    document.getElementById('label-template-body').value = t.body;
+    document.getElementById('label-template-form').style.display = 'block';
+    document.getElementById('label-template-name').focus();
+  });
+}
+
+function saveLabelTemplateForm() {
+  var name = document.getElementById('label-template-name').value.trim();
+  var body = document.getElementById('label-template-body').value.trim();
+  var editId = document.getElementById('label-template-edit-id').value;
+
+  if (!name) {
+    alert('Please enter a template name.');
+    return;
+  }
+  if (!body) {
+    alert('Please enter a label text.');
+    return;
+  }
+
+  loadLabelTemplates(function (templates) {
+    if (editId === '') {
+      templates.push({ id: String(Date.now()), name: name, body: body });
+    } else {
+      var idx = parseInt(editId);
+      templates[idx] = { id: templates[idx].id, name: name, body: body };
+    }
+    saveLabelTemplates(templates);
+    document.getElementById('label-template-form').style.display = 'none';
+    renderLabelTemplates();
+  });
+}
+
+function cancelLabelTemplateForm() {
+  document.getElementById('label-template-form').style.display = 'none';
+}
+
+function deleteLabelTemplate(index) {
+  loadLabelTemplates(function (templates) {
+    templates.splice(index, 1);
+    saveLabelTemplates(templates);
+    renderLabelTemplates();
   });
 }
 

@@ -103,6 +103,7 @@
     <div class="footer">
       <div style="display:flex;gap:5px;">
         <button class="set-completed-btn" id="set-completed-btn">Set Resolved &rsaquo;</button>
+        <button class="set-completed-btn" id="add-label-btn">Add Label &rsaquo;</button>
         <button class="set-completed-btn" id="copy-id-btn">Copy ID</button>
       </div>
       <button class="options-link" id="options-link">Manage templates &rsaquo;</button>
@@ -123,7 +124,17 @@
     </div>
   </div>
 
-  <!-- View 3: Copy ID comment selection -->
+  <!-- View 3: Label selection -->
+  <div id="view-label" style="display:none">
+    <h3>Select Label</h3>
+    <ul id="label-list" class="template-list">
+    </ul>
+    <div class="footer">
+      <button class="options-link" id="back-label-btn">&#8592; Back</button>
+    </div>
+  </div>
+
+  <!-- View 4: Copy ID comment selection -->
   <div id="view-copy-id" style="display:none">
     <h3>Select ID Comment</h3>
     <ul id="copy-id-comment-list" class="template-list">
