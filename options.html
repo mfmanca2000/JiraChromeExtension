@@ -228,6 +228,70 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Time Tracker &mdash; Employee Number</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Your SAP employee number, used when submitting time entries. Configured once.
+    </p>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" id="employee-number" placeholder="e.g. 07099922"
+        style="flex:1; font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px;">
+      <button class="btn btn-primary" id="save-employee-number-btn">Save</button>
+    </div>
+    <div id="employee-number-status" style="font-size:9pt; margin-top:4px; min-height:14px;"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Time Entry Profiles</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Saved combinations of Type de prestation, PSP element, and position for quick selection when logging time.
+    </p>
+    <div id="time-profile-list"></div>
+    <button class="btn" id="add-time-profile-btn" style="margin-top:4px">+ Add Profile</button>
+    <div id="time-profile-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="time-profile-edit-id" value="">
+      <label for="time-profile-name">Profile name</label>
+      <input type="text" id="time-profile-name" placeholder="e.g. Main Project">
+      <label for="time-profile-lstar">Type de prestation (LstarKey)</label>
+      <input type="text" id="time-profile-lstar" placeholder="e.g. 21127">
+      <label for="time-profile-element-type">Element type</label>
+      <select id="time-profile-element-type" style="width:100%; box-sizing:border-box; font-family:inherit; font-size:10pt; padding:4px; margin-bottom:8px;">
+        <option value="KAUFTR">KAUFTR</option>
+        <option value="PSP">PSP</option>
+      </select>
+      <label for="time-profile-psp">PSP element key</label>
+      <input type="text" id="time-profile-psp" placeholder="e.g. 310507551">
+      <label for="time-profile-position">Position number (SubElementKey) <span style="font-weight:normal;color:#888">— optional</span></label>
+      <input type="text" id="time-profile-position" placeholder="e.g. 30 (leave empty if not applicable)">
+      <div>
+        <button class="btn btn-primary" id="time-profile-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="time-profile-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Time Comment Templates</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Preset comment texts shown as quick-select chips when logging time. The INC number and Jira key are prepended automatically.
+    </p>
+    <div id="time-comment-list"></div>
+    <button class="btn" id="add-time-comment-btn" style="margin-top:4px">+ Add Template</button>
+    <div id="time-comment-form" class="template-form-panel" style="display:none">
+      <input type="hidden" id="time-comment-edit-id" value="">
+      <label for="time-comment-name">Name</label>
+      <input type="text" id="time-comment-name" placeholder="e.g. Standard Investigation">
+      <label for="time-comment-body">Comment text</label>
+      <textarea id="time-comment-body" placeholder="e.g. Analysis and investigation of the reported issue"></textarea>
+      <div>
+        <button class="btn btn-primary" id="time-comment-save-btn">Save</button>
+        &nbsp;
+        <button class="btn" id="time-comment-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>

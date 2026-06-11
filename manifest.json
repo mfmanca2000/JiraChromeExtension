@@ -13,10 +13,13 @@
     "tabs",
     "scripting",
     "clipboardWrite",
-    "storage"
+    "storage",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
-    "https://issue.swisscom.ch/*"
+    "https://issue.swisscom.ch/*",
+    "https://pmpgwd.apps.swisscom.com/*",
+    "http://127.0.0.1:27182/"
   ],
   "action": {
     "default_title": "Jira Extension",

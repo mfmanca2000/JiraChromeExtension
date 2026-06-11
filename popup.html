@@ -88,6 +88,19 @@
       text-align: center;
       min-height: 14px;
     }
+    .te-row { display: flex; align-items: center; margin-bottom: 4px; }
+    .te-label { font-size: 11px; color: #555; min-width: 40px; }
+    .te-input { flex: 1; font-size: 11px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box; }
+    .te-time { max-width: 72px; flex: none; }
+    .te-comment-area { width: 100%; box-sizing: border-box; font-size: 11px; padding: 4px; border: 1px solid #ccc; border-radius: 3px; resize: vertical; margin-bottom: 4px; font-family: Arial, sans-serif; }
+    .te-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 5px; }
+    .te-chip { font-size: 10px; padding: 2px 6px; border: 1px solid #4285f4; border-radius: 10px; color: #4285f4; cursor: pointer; background: #fff; line-height: 1.5; }
+    .te-chip:hover { background: #e8f0fe; }
+    .te-chip.active { background: #4285f4; color: #fff; }
+    .te-dur-chip { border-color: #5f6368; color: #5f6368; }
+    .te-dur-chip:hover { background: #f1f3f4; }
+    .te-dur-chip.active { background: #5f6368; color: #fff; }
+    .te-prefix { font-size: 10px; color: #333; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 3px; padding: 3px 6px; margin-bottom: 6px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -107,6 +120,9 @@
         <button class="set-completed-btn" id="copy-id-btn">Copy ID</button>
       </div>
       <button class="options-link" id="options-link">Manage templates &rsaquo;</button>
+    </div>
+    <div style="margin-top:4px">
+      <button class="set-completed-btn" id="log-time-btn" style="background-color:#0f9d58">&#9200; Log Time &rsaquo;</button>
     </div>
   </div>
 
@@ -145,6 +161,52 @@
     </ul>
     <div class="footer">
       <button class="options-link" id="back-copy-id-btn">&#8592; Back</button>
+    </div>
+  </div>
+
+  <!-- View 5: Time entry -->
+  <div id="view-time-entry" style="display:none">
+    <h3>Log Time</h3>
+    <div id="te-prefix" class="te-prefix">Loading issue info...</div>
+    <div class="te-row">
+      <span class="te-label">Date</span>
+      <input type="date" id="te-date" class="te-input">
+    </div>
+    <div class="te-row">
+      <span class="te-label">Start</span>
+      <input type="text" id="te-start" class="te-input te-time" placeholder="HH:MM" pattern="[0-9]{2}:[0-9]{2}" maxlength="5">
+      <span class="te-label" style="margin-left:6px">End</span>
+      <input type="text" id="te-end" class="te-input te-time" placeholder="HH:MM" pattern="[0-9]{2}:[0-9]{2}" maxlength="5">
+    </div>
+    <div id="te-durations" class="te-chips">
+      <button class="te-chip te-dur-chip" data-min="15">15m</button>
+      <button class="te-chip te-dur-chip" data-min="30">30m</button>
+      <button class="te-chip te-dur-chip" data-min="45">45m</button>
+      <button class="te-chip te-dur-chip" data-min="60">1h</button>
+      <button class="te-chip te-dur-chip" data-min="90">1h30</button>
+      <button class="te-chip te-dur-chip" data-min="120">2h</button>
+    </div>
+    <div class="te-row">
+      <span class="te-label">Profile</span>
+      <select id="te-profile" class="te-input"></select>
+    </div>
+    <div class="te-row"><span class="te-label">Comment</span></div>
+    <textarea id="te-comment" class="te-comment-area" rows="2" placeholder="Investigation details..."></textarea>
+    <div id="te-templates" class="te-chips"></div>
+    <div class="te-row" style="margin-top:4px">
+      <span class="te-label" style="min-width:46px;color:#c62828"
+        title="F12 → Network → any SAP request → Request Headers → find SAP_SESSIONID_P3L_100 → copy its value (the part after the = sign)">Session ID</span>
+      <input type="text" id="te-sap-cookie" class="te-input"
+        placeholder="Value of SAP_SESSIONID_P3L_100 from Edge…"
+        style="font-size:9px;font-family:monospace;">
+      <button id="te-fetch-cookie-btn"
+        title="Auto-fetch from Edge — start bridge/start.bat first, then click the bookmarklet on the SAP page in Edge"
+        style="flex:none;margin-left:4px;font-size:13px;padding:0 6px;border:1px solid #0f9d58;border-radius:3px;color:#0f9d58;background:#fff;cursor:pointer;line-height:1.6">↻</button>
+    </div>
+    <div id="te-status" class="status-msg"></div>
+    <div class="footer">
+      <button class="options-link" id="back-time-entry-btn">&#8592; Back</button>
+      <button class="set-completed-btn" id="submit-time-entry-btn">Submit</button>
     </div>
   </div>
 

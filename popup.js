@@ -225,6 +225,195 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  // -- Log Time --
+
+  var logTimeBtn = document.getElementById('log-time-btn');
+  var viewTimeEntry = document.getElementById('view-time-entry');
+  var backTimeEntryBtn = document.getElementById('back-time-entry-btn');
+  var submitTimeEntryBtn = document.getElementById('submit-time-entry-btn');
+  var teDateInput = document.getElementById('te-date');
+  var teStartInput = document.getElementById('te-start');
+  var teEndInput = document.getElementById('te-end');
+  var teProfileSelect = document.getElementById('te-profile');
+  var teCommentTextarea = document.getElementById('te-comment');
+  var teTemplatesDiv = document.getElementById('te-templates');
+  var tePrefixDiv = document.getElementById('te-prefix');
+  var teStatusDiv = document.getElementById('te-status');
+  var teSapCookieInput = document.getElementById('te-sap-cookie');
+  var teFetchCookieBtn = document.getElementById('te-fetch-cookie-btn');
+
+  teFetchCookieBtn.addEventListener('click', function() {
+    teFetchCookieBtn.disabled = true;
+    teFetchCookieBtn.textContent = '…';
+    teStatusDiv.textContent = '';
+    chrome.runtime.sendMessage({ action: 'getEdgeSapCookie' }, function(response) {
+      teFetchCookieBtn.disabled = false;
+      teFetchCookieBtn.textContent = '↻';
+      if (response && response.success) {
+        teSapCookieInput.value = response.sessionId;
+        teStatusDiv.style.color = 'green';
+        teStatusDiv.textContent = 'Session ID fetched from Edge!';
+        setTimeout(function() { teStatusDiv.textContent = ''; }, 2000);
+      } else {
+        teStatusDiv.style.color = 'red';
+        teStatusDiv.textContent = (response && response.error) || 'Could not fetch from Edge';
+      }
+    });
+  });
+
+  var currentIssueInfo = null;
+
+  function applyDuration(minutes) {
+    if (!teStartInput.value) return;
+    var parts = teStartInput.value.split(':');
+    var totalMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) + minutes;
+    var h = Math.floor(totalMin / 60) % 24;
+    var m = totalMin % 60;
+    teEndInput.value = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  function clearDurChips() {
+    document.querySelectorAll('.te-dur-chip').forEach(function(c) { c.classList.remove('active'); });
+  }
+
+  document.getElementById('te-durations').querySelectorAll('.te-dur-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      clearDurChips();
+      chip.classList.add('active');
+      applyDuration(parseInt(chip.dataset.min));
+    });
+  });
+
+  teStartInput.addEventListener('change', clearDurChips);
+  teEndInput.addEventListener('change', clearDurChips);
+
+  logTimeBtn.addEventListener('click', function() {
+    setCompletedStatus.textContent = '';
+    currentIssueInfo = null;
+    teStatusDiv.textContent = '';
+    submitTimeEntryBtn.disabled = false;
+
+    var today = new Date();
+    teDateInput.value = today.getFullYear() + '-' +
+      String(today.getMonth() + 1).padStart(2, '0') + '-' +
+      String(today.getDate()).padStart(2, '0');
+    teStartInput.value = '09:00';
+    teEndInput.value = '10:00';
+    teCommentTextarea.value = '';
+    clearDurChips();
+    var oneH = document.querySelector('.te-dur-chip[data-min="60"]');
+    if (oneH) oneH.classList.add('active');
+
+    chrome.storage.local.get(['timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'], function(result) {
+      var profiles = result.timeProfiles || [];
+      var templates = result.timeCommentTemplates || [];
+      var empNum = result.employeeNumber || '';
+      teSapCookieInput.value = result.sapCookies || '';
+
+      teProfileSelect.innerHTML = '';
+      if (profiles.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No profiles — configure in options';
+        opt.disabled = true;
+        opt.selected = true;
+        teProfileSelect.appendChild(opt);
+      } else {
+        profiles.forEach(function(p, i) {
+          var opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = p.name;
+          teProfileSelect.appendChild(opt);
+        });
+      }
+
+      teTemplatesDiv.innerHTML = '';
+      templates.forEach(function(t) {
+        var chip = document.createElement('button');
+        chip.className = 'te-chip';
+        chip.textContent = t.name;
+        chip.title = t.body;
+        chip.addEventListener('click', function() {
+          document.querySelectorAll('#te-templates .te-chip').forEach(function(c) { c.classList.remove('active'); });
+          chip.classList.add('active');
+          teCommentTextarea.value = t.body;
+        });
+        teTemplatesDiv.appendChild(chip);
+      });
+
+      tePrefixDiv.style.color = '#333';
+      if (!empNum) {
+        tePrefixDiv.textContent = '⚠ Employee number not set — configure in options';
+        tePrefixDiv.style.color = '#c62828';
+      } else {
+        tePrefixDiv.textContent = 'Loading issue info…';
+        chrome.runtime.sendMessage({action: 'getIssueInfo'}, function(response) {
+          if (response && response.success) {
+            currentIssueInfo = {itsm: response.itsm, op: response.op};
+            tePrefixDiv.textContent = (response.itsm ? response.itsm + ':' : '') + response.op + ': …';
+          } else {
+            tePrefixDiv.textContent = (response && response.error) || 'Could not load issue info';
+            tePrefixDiv.style.color = '#c62828';
+          }
+        });
+      }
+
+      viewMail.style.display = 'none';
+      viewTimeEntry.style.display = 'block';
+    });
+  });
+
+  backTimeEntryBtn.addEventListener('click', function() {
+    viewTimeEntry.style.display = 'none';
+    viewMail.style.display = 'block';
+    setCompletedStatus.textContent = '';
+  });
+
+  submitTimeEntryBtn.addEventListener('click', function() {
+    var date = teDateInput.value;
+    var startTime = teStartInput.value;
+    var endTime = teEndInput.value;
+    var profileIndex = teProfileSelect.value;
+    var comment = teCommentTextarea.value.trim();
+
+    teStatusDiv.style.color = 'red';
+    if (!date) { teStatusDiv.textContent = 'Please select a date.'; return; }
+    if (!startTime) { teStatusDiv.textContent = 'Please enter a start time.'; return; }
+    if (!/^[0-9]{2}:[0-9]{2}$/.test(startTime)) { teStatusDiv.textContent = 'Start time must be HH:MM (e.g. 09:00).'; return; }
+    if (!endTime) { teStatusDiv.textContent = 'Please enter an end time.'; return; }
+    if (!/^[0-9]{2}:[0-9]{2}$/.test(endTime)) { teStatusDiv.textContent = 'End time must be HH:MM (e.g. 10:00).'; return; }
+    if (profileIndex === '') { teStatusDiv.textContent = 'Please select a profile.'; return; }
+    if (!currentIssueInfo) { teStatusDiv.textContent = 'Issue info not loaded. Is this a Jira page?'; return; }
+
+    submitTimeEntryBtn.disabled = true;
+    teStatusDiv.style.color = '#555';
+    teStatusDiv.textContent = 'Submitting…';
+
+    chrome.runtime.sendMessage({
+      action: 'logTime',
+      date: date,
+      startTime: startTime,
+      endTime: endTime,
+      profileIndex: parseInt(profileIndex),
+      comment: comment,
+      itsm: currentIssueInfo.itsm,
+      op: currentIssueInfo.op,
+      sapCookies: teSapCookieInput.value.trim()
+    }, function(response) {
+      if (response && response.success) {
+        viewTimeEntry.style.display = 'none';
+        viewMail.style.display = 'block';
+        setCompletedStatus.style.color = 'green';
+        setCompletedStatus.textContent = 'Time entry submitted!';
+        setTimeout(function() { window.close(); }, 1200);
+      } else {
+        teStatusDiv.style.color = 'red';
+        teStatusDiv.textContent = (response && response.error) || 'Unknown error';
+        submitTimeEntryBtn.disabled = false;
+      }
+    });
+  });
+
   function sendMailWithTemplate(body) {
     chrome.runtime.sendMessage({ action: 'sendMail', templateBody: body });
     window.close();

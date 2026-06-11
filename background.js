@@ -255,8 +255,233 @@ async function handleAddLabel(label, sendResponse) {
   }
 }
 
+// Returns the itsm (INC number) and issue key for the current Jira tab.
+async function handleGetIssueInfo(sendResponse) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    const issueKey = extractIssueKey(tab.url);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Not a JIRA issue page' });
+      return;
+    }
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521`, {
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error(`Could not fetch issue (HTTP ${res.status})`);
+    const data = await res.json();
+    const raw = data.fields && data.fields.customfield_10521;
+    const itsm = raw ? String(raw).trim() : '';
+    sendResponse({ success: true, itsm, op: issueKey });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
+
+// Builds and POSTs a time entry to the SAP time tracker.
+async function handleLogTime(payload, sendResponse) {
+  try {
+    const stored = await new Promise(resolve =>
+      chrome.storage.local.get(['employeeNumber', 'timeProfiles'], resolve)
+    );
+    const employeeNumber = stored.employeeNumber || '';
+    const profiles = stored.timeProfiles || [];
+
+    if (!employeeNumber) {
+      sendResponse({ success: false, error: 'Employee number not configured. Set it in Options.' });
+      return;
+    }
+    const profile = profiles[payload.profileIndex];
+    if (!profile) {
+      sendResponse({ success: false, error: 'Profile not found. It may have been deleted.' });
+      return;
+    }
+
+    const sessionId = (payload.sapCookies || '').trim();
+    await new Promise(resolve => chrome.storage.local.set({ sapCookies: sessionId }, resolve));
+
+    const [year, month, day] = payload.date.split('-').map(Number);
+    const [startH, startM] = payload.startTime.split(':').map(Number);
+    const [endH, endM] = payload.endTime.split(':').map(Number);
+
+    const prefix = payload.itsm ? payload.itsm + ':' + payload.op : payload.op;
+    const fullText = payload.comment ? prefix + ': ' + payload.comment : prefix;
+
+    // SAP quirk: embed local h:m directly as UTC milliseconds for Start/EndDate.
+    function sapDate(y, mo, d, h, m) {
+      return '/Date(' + Date.UTC(y, mo - 1, d, h, m, 0) + ')/';
+    }
+    function sapDuration(h, m) {
+      return 'PT' + String(h).padStart(2, '0') + 'H' + String(m).padStart(2, '0') + 'M00S';
+    }
+    // start_date: real UTC timestamp of local midnight (used as day anchor).
+    const startOfDayMs = new Date(year, month - 1, day, 0, 0, 0).getTime();
+
+    const sapPayload = {
+      Profile: 'SC01',
+      Mode: '',
+      EmployeeNumber: employeeNumber,
+      StartDate: sapDate(year, month, day, startH, startM),
+      EndDate: sapDate(year, month, day, endH, endM),
+      StartTime: sapDuration(startH, startM),
+      EndTime: sapDuration(endH, endM),
+      DayFlag: 'Time',
+      BreakStart: 'PT00H00M00S',
+      BreakEnd: 'PT00H00M00S',
+      TimeType: '',
+      LstarKey: profile.lstarKey,
+      LstarValue: '',
+      TargetElementType: profile.targetElementType || 'KAUFTR',
+      TargetElementKey: profile.psp,
+      TargetElementValue: '',
+      SubElementKey: profile.position || '',
+      SubElementValue: '',
+      SubSubElementKey: '',
+      SubSubElementValue: '',
+      CalcMotiveKey: '',
+      CalcMotiveValue: '',
+      FinConf: false,
+      TasktypeKey: '',
+      TasktypeValue: '',
+      text: fullText,
+      start_date: '/Date(' + startOfDayMs + ')/',
+      Fieldglass: ''
+    };
+
+    if (!sessionId) {
+      sendResponse({ success: false, error: 'SAP Session ID is empty. Paste it in the Session ID field.' });
+      return;
+    }
+
+    // Build full Cookie header: prefix with cookie name + add companion cookies to avoid Negotiate re-challenge.
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const dt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    const negoTs = dt.replace(/ /g, '%20').replace(/:/g, '%3a');
+    const fullCookieStr = `SAP_SESSIONID_P3L_100=${sessionId}; SPNegoTokenRequested=${negoTs}; sap-usercontext=sap-client=100`;
+
+    console.log('[SAP] session ID length:', sessionId.length, '| preview:', sessionId.substring(0, 30) + '…');
+    console.log('[SAP] full cookie:', fullCookieStr.substring(0, 120) + '…');
+
+    const DNR_RULE_ID = 42;
+    try {
+      await chrome.declarativeNetRequest.updateSessionRules({
+        removeRuleIds: [DNR_RULE_ID],
+        addRules: [{
+          id: DNR_RULE_ID,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            requestHeaders: [{ header: 'Cookie', operation: 'set', value: fullCookieStr }]
+          },
+          condition: { urlFilter: '||pmpgwd.apps.swisscom.com' }
+        }]
+      });
+      console.log('[SAP] DNR rule installed');
+    } catch (e) {
+      console.error('[SAP] DNR rule setup failed:', e);
+    }
+
+    const SAP_HEADERS = {
+      'DataServiceVersion': '2.0',
+      'MaxDataServiceVersion': '2.0',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-XHR-Logon': 'accept="iframe,strict-window,window"',
+      'sap-contextid-accept': 'header'
+    };
+
+    try {
+      let csrfToken = '';
+      try {
+        console.log('[SAP] fetching CSRF token…');
+        const csrfRes = await fetch(
+          'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/?sap-client=100',
+          { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } }
+        );
+        console.log('[SAP] CSRF status:', csrfRes.status,
+          '| redirected:', csrfRes.redirected,
+          '| final url:', csrfRes.url);
+        console.log('[SAP] CSRF response headers:',
+          Object.fromEntries(csrfRes.headers.entries()));
+
+        if (csrfRes.status === 401) {
+          sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
+          return;
+        }
+        csrfToken = csrfRes.headers.get('X-CSRF-Token') || '';
+        console.log('[SAP] CSRF token:', csrfToken || '(none)');
+      } catch (e) {
+        console.error('[SAP] CSRF fetch error:', e);
+      }
+
+      const postHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'sap-cancel-on-close': 'false',
+        ...SAP_HEADERS
+      };
+      if (csrfToken) postHeaders['x-csrf-token'] = csrfToken;
+
+      console.log('[SAP] posting time entry…');
+      const res = await fetch(
+        'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100',
+        { method: 'POST', credentials: 'omit', headers: postHeaders, body: JSON.stringify(sapPayload) }
+      );
+      console.log('[SAP] POST status:', res.status,
+        '| redirected:', res.redirected,
+        '| final url:', res.url);
+
+      if (!res.ok) {
+        const body = await res.text();
+        console.log('[SAP] POST error body:', body.substring(0, 500));
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const errJson = JSON.parse(body);
+          if (errJson.error && errJson.error.message && errJson.error.message.value) {
+            errMsg = errJson.error.message.value;
+          }
+        } catch (e) { /* use status code */ }
+        throw new Error(errMsg);
+      }
+
+      sendResponse({ success: true });
+    } finally {
+      chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [DNR_RULE_ID] });
+      console.log('[SAP] DNR rule removed');
+    }
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+  if (message.action === 'getEdgeSapCookie') {
+    fetch('http://127.0.0.1:27182/get')
+      .then(r => r.json())
+      .then(data => {
+        if (data.sessionId) {
+          sendResponse({ success: true, sessionId: data.sessionId });
+        } else {
+          sendResponse({ success: false, error: data.error || 'No cookie stored' });
+        }
+      })
+      .catch(() => sendResponse({ success: false, error: 'Bridge not running. Start bridge/start.bat first.' }));
+    return true;
+  }
+
+  if (message.action === 'getIssueInfo') {
+    handleGetIssueInfo(sendResponse);
+    return true;
+  }
+
+  if (message.action === 'logTime') {
+    handleLogTime(message, sendResponse);
+    return true;
+  }
+
   if (message.action === 'addLabel') {
     handleAddLabel(message.label, sendResponse);
     return true; // keep channel open for async response

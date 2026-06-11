@@ -17,6 +17,9 @@ function main() {
   renderIncResolutionTemplates();
   renderLabelTemplates();
   renderCopyIdComments();
+  renderEmployeeNumber();
+  renderTimeProfiles();
+  renderTimeCommentTemplates();
 
   // Check for stored preference
   chrome.storage.local.get('customMailtoUrl', function (result) {
@@ -168,6 +171,13 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('add-copy-id-comment-btn').addEventListener('click', openAddCopyIdCommentForm);
   document.getElementById('copy-id-comment-save-btn').addEventListener('click', saveCopyIdCommentForm);
   document.getElementById('copy-id-comment-cancel-btn').addEventListener('click', cancelCopyIdCommentForm);
+  document.getElementById('save-employee-number-btn').addEventListener('click', saveEmployeeNumber);
+  document.getElementById('add-time-profile-btn').addEventListener('click', openAddTimeProfileForm);
+  document.getElementById('time-profile-save-btn').addEventListener('click', saveTimeProfileForm);
+  document.getElementById('time-profile-cancel-btn').addEventListener('click', cancelTimeProfileForm);
+  document.getElementById('add-time-comment-btn').addEventListener('click', openAddTimeCommentForm);
+  document.getElementById('time-comment-save-btn').addEventListener('click', saveTimeCommentForm);
+  document.getElementById('time-comment-cancel-btn').addEventListener('click', cancelTimeCommentForm);
 });
 
 // ---- INC Resolution template management ----
@@ -492,5 +502,245 @@ function deleteCopyIdComment(index) {
     comments.splice(index, 1);
     saveCopyIdComments(comments);
     renderCopyIdComments();
+  });
+}
+
+// ---- Employee Number ----
+
+function renderEmployeeNumber() {
+  chrome.storage.local.get('employeeNumber', function (result) {
+    document.getElementById('employee-number').value = result.employeeNumber || '';
+  });
+}
+
+function saveEmployeeNumber() {
+  var num = document.getElementById('employee-number').value.trim();
+  chrome.storage.local.set({ employeeNumber: num }, function () {
+    var status = document.getElementById('employee-number-status');
+    status.style.color = 'green';
+    status.textContent = 'Saved.';
+    setTimeout(function () { status.textContent = ''; }, 2000);
+  });
+}
+
+// ---- Time Entry Profiles ----
+
+function loadTimeProfiles(callback) {
+  chrome.storage.local.get('timeProfiles', function (result) {
+    callback(result.timeProfiles || []);
+  });
+}
+
+function saveTimeProfiles(profiles) {
+  chrome.storage.local.set({ timeProfiles: profiles });
+}
+
+function renderTimeProfiles() {
+  loadTimeProfiles(function (profiles) {
+    var container = document.getElementById('time-profile-list');
+    container.innerHTML = '';
+
+    if (profiles.length === 0) {
+      container.innerHTML = '<p class="no-templates-msg">No profiles yet.</p>';
+      return;
+    }
+
+    profiles.forEach(function (p, index) {
+      var entry = document.createElement('div');
+      entry.className = 'template-entry';
+      entry.innerHTML =
+        '<div class="template-entry-info">' +
+          '<div class="template-entry-name">' + escapeHtml(p.name) + '</div>' +
+          '<div class="template-entry-preview">' +
+            escapeHtml('Type: ' + p.lstarKey + ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp + (p.position ? ' | Pos: ' + p.position : '')) +
+          '</div>' +
+        '</div>' +
+        '<div class="template-entry-actions">' +
+          '<button class="btn btn-sm" data-index="' + index + '" data-action="edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-index="' + index + '" data-action="delete">Delete</button>' +
+        '</div>';
+      container.appendChild(entry);
+    });
+
+    container.querySelectorAll('button[data-action="edit"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openEditTimeProfileForm(parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('button[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        deleteTimeProfile(parseInt(btn.dataset.index));
+      });
+    });
+  });
+}
+
+function openAddTimeProfileForm() {
+  document.getElementById('time-profile-edit-id').value = '';
+  document.getElementById('time-profile-name').value = '';
+  document.getElementById('time-profile-lstar').value = '';
+  document.getElementById('time-profile-element-type').value = 'KAUFTR';
+  document.getElementById('time-profile-psp').value = '';
+  document.getElementById('time-profile-position').value = '';
+  document.getElementById('time-profile-form').style.display = 'block';
+  document.getElementById('time-profile-name').focus();
+}
+
+function openEditTimeProfileForm(index) {
+  loadTimeProfiles(function (profiles) {
+    var p = profiles[index];
+    document.getElementById('time-profile-edit-id').value = String(index);
+    document.getElementById('time-profile-name').value = p.name;
+    document.getElementById('time-profile-lstar').value = p.lstarKey;
+    document.getElementById('time-profile-element-type').value = p.targetElementType || 'KAUFTR';
+    document.getElementById('time-profile-psp').value = p.psp;
+    document.getElementById('time-profile-position').value = p.position || '';
+    document.getElementById('time-profile-form').style.display = 'block';
+    document.getElementById('time-profile-name').focus();
+  });
+}
+
+function saveTimeProfileForm() {
+  var name = document.getElementById('time-profile-name').value.trim();
+  var lstarKey = document.getElementById('time-profile-lstar').value.trim();
+  var targetElementType = document.getElementById('time-profile-element-type').value;
+  var psp = document.getElementById('time-profile-psp').value.trim();
+  var position = document.getElementById('time-profile-position').value.trim();
+  var editId = document.getElementById('time-profile-edit-id').value;
+
+  if (!name) { alert('Please enter a profile name.'); return; }
+  if (!lstarKey) { alert('Please enter the Type de prestation code.'); return; }
+  if (!psp) { alert('Please enter the PSP element key.'); return; }
+
+  loadTimeProfiles(function (profiles) {
+    var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position };
+    if (editId === '') {
+      profiles.push(entry);
+    } else {
+      var idx = parseInt(editId);
+      entry.id = profiles[idx].id;
+      profiles[idx] = entry;
+    }
+    saveTimeProfiles(profiles);
+    document.getElementById('time-profile-form').style.display = 'none';
+    renderTimeProfiles();
+  });
+}
+
+function cancelTimeProfileForm() {
+  document.getElementById('time-profile-form').style.display = 'none';
+}
+
+function deleteTimeProfile(index) {
+  loadTimeProfiles(function (profiles) {
+    profiles.splice(index, 1);
+    saveTimeProfiles(profiles);
+    renderTimeProfiles();
+  });
+}
+
+// ---- Time Comment Templates ----
+
+function loadTimeCommentTemplates(callback) {
+  chrome.storage.local.get('timeCommentTemplates', function (result) {
+    callback(result.timeCommentTemplates || []);
+  });
+}
+
+function saveTimeCommentTemplates(templates) {
+  chrome.storage.local.set({ timeCommentTemplates: templates });
+}
+
+function renderTimeCommentTemplates() {
+  loadTimeCommentTemplates(function (templates) {
+    var container = document.getElementById('time-comment-list');
+    container.innerHTML = '';
+
+    if (templates.length === 0) {
+      container.innerHTML = '<p class="no-templates-msg">No templates yet.</p>';
+      return;
+    }
+
+    templates.forEach(function (t, index) {
+      var entry = document.createElement('div');
+      entry.className = 'template-entry';
+      entry.innerHTML =
+        '<div class="template-entry-info">' +
+          '<div class="template-entry-name">' + escapeHtml(t.name) + '</div>' +
+          '<div class="template-entry-preview">' +
+            escapeHtml(t.body.substring(0, 100)) + (t.body.length > 100 ? '...' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="template-entry-actions">' +
+          '<button class="btn btn-sm" data-index="' + index + '" data-action="edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-index="' + index + '" data-action="delete">Delete</button>' +
+        '</div>';
+      container.appendChild(entry);
+    });
+
+    container.querySelectorAll('button[data-action="edit"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openEditTimeCommentForm(parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('button[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        deleteTimeComment(parseInt(btn.dataset.index));
+      });
+    });
+  });
+}
+
+function openAddTimeCommentForm() {
+  document.getElementById('time-comment-edit-id').value = '';
+  document.getElementById('time-comment-name').value = '';
+  document.getElementById('time-comment-body').value = '';
+  document.getElementById('time-comment-form').style.display = 'block';
+  document.getElementById('time-comment-name').focus();
+}
+
+function openEditTimeCommentForm(index) {
+  loadTimeCommentTemplates(function (templates) {
+    var t = templates[index];
+    document.getElementById('time-comment-edit-id').value = String(index);
+    document.getElementById('time-comment-name').value = t.name;
+    document.getElementById('time-comment-body').value = t.body;
+    document.getElementById('time-comment-form').style.display = 'block';
+    document.getElementById('time-comment-name').focus();
+  });
+}
+
+function saveTimeCommentForm() {
+  var name = document.getElementById('time-comment-name').value.trim();
+  var body = document.getElementById('time-comment-body').value.trim();
+  var editId = document.getElementById('time-comment-edit-id').value;
+
+  if (!name) { alert('Please enter a template name.'); return; }
+  if (!body) { alert('Please enter the comment text.'); return; }
+
+  loadTimeCommentTemplates(function (templates) {
+    if (editId === '') {
+      templates.push({ id: String(Date.now()), name: name, body: body });
+    } else {
+      var idx = parseInt(editId);
+      templates[idx] = { id: templates[idx].id, name: name, body: body };
+    }
+    saveTimeCommentTemplates(templates);
+    document.getElementById('time-comment-form').style.display = 'none';
+    renderTimeCommentTemplates();
+  });
+}
+
+function cancelTimeCommentForm() {
+  document.getElementById('time-comment-form').style.display = 'none';
+}
+
+function deleteTimeComment(index) {
+  loadTimeCommentTemplates(function (templates) {
+    templates.splice(index, 1);
+    saveTimeCommentTemplates(templates);
+    renderTimeCommentTemplates();
   });
 }
