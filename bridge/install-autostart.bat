@@ -5,7 +5,8 @@ set TASK_NAME=SAP Cookie Bridge
 set VBS=%~dp0launcher.vbs
 
 echo Registering "%TASK_NAME%" to start at login...
-schtasks /create /tn "%TASK_NAME%" /tr "wscript.exe \"%VBS%\"" /sc onlogon /f
+schtasks /create /tn "%TASK_NAME%" /tr "wscript.exe \"%VBS%\"" /sc onlogon /f /it
+powershell -NoProfile -Command "$t=Get-ScheduledTask -TaskName '%TASK_NAME%';$t.Settings.DisallowStartIfOnBatteries=$false;$t.Settings.StopIfGoingOnBatteries=$false;Set-ScheduledTask -InputObject $t" >nul 2>&1
 
 if %ERRORLEVEL% == 0 (
   echo.

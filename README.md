@@ -27,7 +27,7 @@ A Chrome extension for the Swisscom Jira instance that adds shortcuts for common
 
 ### Why the bridge exists
 
-The SAP time-tracking site (`pmpgwd.apps.swisscom.com`) authenticates via **Windows Kerberos**. Edge handles this automatically on the corporate network; Chrome cannot. The workaround is:
+The SAP time-tracking site (`pmpgwd.apps.swisscom.com`) authenticates via **Kerberos**. Edge handles this automatically on the corporate network (Windows and macOS); Chrome cannot. The workaround is:
 
 1. Let Edge authenticate and obtain the SAP session cookie
 2. Pass that cookie to the Chrome extension so it can inject it into SAP requests
@@ -68,7 +68,7 @@ session cookie     cookie           server on                   │
 
 #### 1. Start the bridge at login (recommended)
 
-Run `bridge/install-autostart.bat` (as administrator if prompted).
+**Windows** — Run `bridge/install-autostart.bat` (as administrator if prompted).
 
 This creates a Windows Task Scheduler entry that launches the bridge silently at every login — no console window, no manual start needed.
 
@@ -76,6 +76,22 @@ To remove the auto-start later:
 ```
 schtasks /delete /tn "SAP Cookie Bridge" /f
 ```
+
+**macOS** — Run once in Terminal:
+```sh
+chmod +x bridge/start.sh bridge/install-autostart.sh
+./bridge/install-autostart.sh
+```
+
+This registers a launchd user agent that starts the bridge automatically at every login. No admin rights required.
+
+To remove the auto-start later:
+```sh
+launchctl unload ~/Library/LaunchAgents/com.sapbridge.server.plist
+rm ~/Library/LaunchAgents/com.sapbridge.server.plist
+```
+
+> **macOS note:** Node.js must be in your PATH. Install it from [nodejs.org](https://nodejs.org) or via `nvm`. If you installed Node.js via nvm, run `install-autostart.sh` from a shell that has already sourced your nvm profile so the correct `node` path is captured.
 
 #### 2. Get the bookmarklet
 
@@ -97,7 +113,7 @@ When the session expires (~10 min), just click the bookmarklet in Edge again and
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Bridge not running` | Bridge server not started | Run `bridge/start.bat`, or re-run `bridge/install-autostart.bat` to set up auto-start |
+| `Bridge not running` | Bridge server not started | Windows: run `bridge/start.bat`, or re-run `bridge/install-autostart.bat`. macOS: run `./bridge/start.sh`, or re-run `./bridge/install-autostart.sh` |
 | `No cookie stored yet` | Bookmarklet not clicked | Click the bookmarklet on the SAP page in Edge |
 | `SAP_SESSIONID_P3L_100 not found (httpOnly)` | Cookie not accessible via JS | Open `http://127.0.0.1:27182` in Edge → paste the cookie value manually (F12 → Application → Storage → Cookies) |
 | `HTTP 401` from SAP | Session expired | Click bookmarklet again (or paste fresh value), then click ↻ |
@@ -110,6 +126,8 @@ When the session expires (~10 min), just click the bookmarklet in Edge again and
 | File | Purpose |
 |---|---|
 | `bridge/server.js` | HTTP bridge server — stores and serves the SAP session cookie |
-| `bridge/start.bat` | Starts the bridge manually (useful for testing) |
-| `bridge/launcher.vbs` | Launches the bridge with no console window (used by Task Scheduler) |
-| `bridge/install-autostart.bat` | Registers the bridge in Task Scheduler to run at login |
+| `bridge/start.bat` | **Windows** — starts the bridge manually (useful for testing) |
+| `bridge/launcher.vbs` | **Windows** — launches the bridge with no console window (used by Task Scheduler) |
+| `bridge/install-autostart.bat` | **Windows** — registers the bridge in Task Scheduler to run at login |
+| `bridge/start.sh` | **macOS** — starts the bridge manually (useful for testing) |
+| `bridge/install-autostart.sh` | **macOS** — registers the bridge as a launchd agent to run at login |
