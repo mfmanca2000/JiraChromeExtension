@@ -297,6 +297,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var oneH = document.querySelector('.te-dur-chip[data-min="60"]');
     if (oneH) oneH.classList.add('active');
 
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      var currentUrl = (tabs && tabs[0]) ? tabs[0].url : '';
+      var issueKeyMatch = currentUrl.match(/\/browse\/([A-Z]+-\d+)/i);
+      var currentPrefix = issueKeyMatch ? issueKeyMatch[1].replace(/-\d+$/, '') : null;
+
     withStorage(function(result) {
       var nextStart = calcNextStartTime(result.lastEndTime, result.lastEndDate);
       teStartInput.value = nextStart;
@@ -329,10 +334,19 @@ document.addEventListener('DOMContentLoaded', function () {
         opt.selected = true;
         teProfileSelect.appendChild(opt);
       } else {
+        var matching = [];
+        var others = [];
         profiles.forEach(function(p, i) {
+          if (currentPrefix && (p.jiraProjects || []).indexOf(currentPrefix) !== -1) {
+            matching.push({p: p, i: i});
+          } else {
+            others.push({p: p, i: i});
+          }
+        });
+        matching.concat(others).forEach(function(item) {
           var opt = document.createElement('option');
-          opt.value = String(i);
-          opt.textContent = p.name;
+          opt.value = String(item.i);
+          opt.textContent = item.p.name;
           teProfileSelect.appendChild(opt);
         });
       }
@@ -370,6 +384,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       viewMail.style.display = 'none';
       viewTimeEntry.style.display = 'block';
+    });
     });
   });
 

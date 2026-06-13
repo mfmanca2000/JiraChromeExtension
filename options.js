@@ -552,7 +552,7 @@ function renderTimeProfiles() {
         '<div class="template-entry-info">' +
           '<div class="template-entry-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="template-entry-preview">' +
-            escapeHtml('Type: ' + p.lstarKey + ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp + (p.position ? ' | Pos: ' + p.position : '')) +
+            escapeHtml('Type: ' + p.lstarKey + ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp + (p.position ? ' | Pos: ' + p.position : '') + (p.jiraProjects && p.jiraProjects.length ? ' | Projects: ' + p.jiraProjects.join(', ') : '')) +
           '</div>' +
         '</div>' +
         '<div class="template-entry-actions">' +
@@ -583,6 +583,7 @@ function openAddTimeProfileForm() {
   document.getElementById('time-profile-element-type').value = 'KAUFTR';
   document.getElementById('time-profile-psp').value = '';
   document.getElementById('time-profile-position').value = '';
+  document.getElementById('time-profile-jira-projects').value = '';
   document.getElementById('time-profile-form').style.display = 'block';
   document.getElementById('time-profile-name').focus();
 }
@@ -596,6 +597,7 @@ function openEditTimeProfileForm(index) {
     document.getElementById('time-profile-element-type').value = p.targetElementType || 'KAUFTR';
     document.getElementById('time-profile-psp').value = p.psp;
     document.getElementById('time-profile-position').value = p.position || '';
+    document.getElementById('time-profile-jira-projects').value = (p.jiraProjects || []).join(', ');
     document.getElementById('time-profile-form').style.display = 'block';
     document.getElementById('time-profile-name').focus();
   });
@@ -607,6 +609,8 @@ function saveTimeProfileForm() {
   var targetElementType = document.getElementById('time-profile-element-type').value;
   var psp = document.getElementById('time-profile-psp').value.trim();
   var position = document.getElementById('time-profile-position').value.trim();
+  var jiraProjects = document.getElementById('time-profile-jira-projects').value
+    .split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
   var editId = document.getElementById('time-profile-edit-id').value;
 
   if (!name) { alert('Please enter a profile name.'); return; }
@@ -614,7 +618,7 @@ function saveTimeProfileForm() {
   if (!psp) { alert('Please enter the PSP element key.'); return; }
 
   loadTimeProfiles(function (profiles) {
-    var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position };
+    var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position, jiraProjects: jiraProjects };
     if (editId === '') {
       profiles.push(entry);
     } else {
