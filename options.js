@@ -552,7 +552,7 @@ function renderTimeProfiles() {
         '<div class="template-entry-info">' +
           '<div class="template-entry-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="template-entry-preview">' +
-            escapeHtml('Type: ' + p.lstarKey + ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp + (p.position ? ' | Pos: ' + p.position : '') + (p.jiraProjects && p.jiraProjects.length ? ' | Projects: ' + p.jiraProjects.join(', ') : '')) +
+            escapeHtml('Type: ' + p.lstarKey + (p.psp ? ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp : '') + (p.position ? ' | Pos: ' + p.position : '') + (p.jiraProjects && p.jiraProjects.length ? ' | Projects: ' + p.jiraProjects.join(', ') : '')) +
           '</div>' +
         '</div>' +
         '<div class="template-entry-actions">' +
@@ -594,8 +594,8 @@ function openEditTimeProfileForm(index) {
     document.getElementById('time-profile-edit-id').value = String(index);
     document.getElementById('time-profile-name').value = p.name;
     document.getElementById('time-profile-lstar').value = p.lstarKey;
-    document.getElementById('time-profile-element-type').value = p.targetElementType || 'KAUFTR';
-    document.getElementById('time-profile-psp').value = p.psp;
+    document.getElementById('time-profile-element-type').value = p.targetElementType || '';
+    document.getElementById('time-profile-psp').value = p.psp || '';
     document.getElementById('time-profile-position').value = p.position || '';
     document.getElementById('time-profile-jira-projects').value = (p.jiraProjects || []).join(', ');
     document.getElementById('time-profile-form').style.display = 'block';
@@ -615,7 +615,6 @@ function saveTimeProfileForm() {
 
   if (!name) { alert('Please enter a profile name.'); return; }
   if (!lstarKey) { alert('Please enter the Type de prestation code.'); return; }
-  if (!psp) { alert('Please enter the PSP element key.'); return; }
 
   loadTimeProfiles(function (profiles) {
     var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position, jiraProjects: jiraProjects };
