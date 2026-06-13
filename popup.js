@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
           setTimeout(function() { teStatusDiv.textContent = ''; }, 2000);
         } else {
           teStatusDiv.style.color = '#e65100';
-          teStatusDiv.textContent = 'Bridge not running — start bridge/start.bat in Edge first';
+          teStatusDiv.textContent = 'Bridge not running - start bridge/start.bat in Edge first';
         }
       });
 
@@ -329,7 +329,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (profiles.length === 0) {
         var opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = 'No profiles — configure in options';
+        opt.textContent = 'No profiles - configure in options';
         opt.disabled = true;
         opt.selected = true;
         teProfileSelect.appendChild(opt);
@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       tePrefixDiv.style.color = '#333';
       if (!empNum) {
-        tePrefixDiv.textContent = '⚠ Employee number not set — configure in options';
+        tePrefixDiv.textContent = '⚠ Employee number not set - configure in options';
         tePrefixDiv.style.color = '#c62828';
       } else {
         tePrefixDiv.textContent = 'Loading issue info…';

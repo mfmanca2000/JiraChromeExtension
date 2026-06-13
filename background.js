@@ -523,7 +523,7 @@ async function handleLogTime(payload, sendResponse) {
           throw new Error(errMsg);
         }
 
-        // Slot is taken — shift both boundaries 15 minutes later.
+        // Slot is taken - shift both boundaries 15 minutes later.
         const newStartMin = startH * 60 + startM + 15;
         startH = Math.floor(newStartMin / 60) % 24;
         startM = newStartMin % 60;
@@ -543,10 +543,10 @@ async function handleLogTime(payload, sendResponse) {
         }
 
         if (endH >= 20) {
-          throw new Error(`No free slot found before 20:00 — check your SAP entries manually. Last error: ${errMsg}`);
+          throw new Error(`No free slot found before 20:00 - check your SAP entries manually. Last error: ${errMsg}`);
         }
 
-        console.log(`[SAP] conflict — retrying at ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
+        console.log(`[SAP] conflict - retrying at ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
       }
     } finally {
       chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [DNR_RULE_ID] });
@@ -615,7 +615,7 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       const tab = tabs[0];
       if (tab.url.indexOf("https://issue.swisscom.ch") !== 0) {
-        // Not a JIRA page — open mail with just the URL, no template body.
+        // Not a JIRA page - open mail with just the URL, no template body.
         executeMailto(tab.id, "", "", tab.url, "");
         pendingTemplateBody = null;
       } else {
