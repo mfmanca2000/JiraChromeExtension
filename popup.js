@@ -19,11 +19,38 @@ document.addEventListener('DOMContentLoaded', function () {
   var noCopyIdCommentItem = document.getElementById('no-copy-id-comment');
   var backCopyIdBtn = document.getElementById('back-copy-id-btn');
 
+  var logTimeBtn = document.getElementById('log-time-btn');
+  var viewTimeEntry = document.getElementById('view-time-entry');
+  var backTimeEntryBtn = document.getElementById('back-time-entry-btn');
+  var submitTimeEntryBtn = document.getElementById('submit-time-entry-btn');
+  var teDateInput = document.getElementById('te-date');
+  var teStartInput = document.getElementById('te-start');
+  var teEndInput = document.getElementById('te-end');
+  var teProfileSelect = document.getElementById('te-profile');
+  var teCommentTextarea = document.getElementById('te-comment');
+  var teTemplatesDiv = document.getElementById('te-templates');
+  var tePrefixDiv = document.getElementById('te-prefix');
+  var teStatusDiv = document.getElementById('te-status');
+  var teSapCookieInput = document.getElementById('te-sap-cookie');
+  var teFetchCookieBtn = document.getElementById('te-fetch-cookie-btn');
+
+  // Batch-load all storage keys at once so subsequent click handlers respond
+  // without an additional async round-trip to chrome.storage.
+  var storageCache = null;
+  chrome.storage.local.get(
+    ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
+     'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'],
+    function (result) {
+      storageCache = result;
+      populateMailTemplates(result.mailTemplates || []);
+    }
+  );
+
   // -- Add Label: load label templates, then show picker --
 
   addLabelBtn.addEventListener('click', function () {
     setCompletedStatus.textContent = '';
-    chrome.storage.local.get('labelTemplates', function (result) {
+    withStorage(function (result) {
       var templates = result.labelTemplates || [];
 
       labelList.innerHTML = '';
@@ -82,7 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   copyIdBtn.addEventListener('click', function () {
     setCompletedStatus.textContent = '';
-    chrome.storage.local.get('copyIdComments', function (result) {
+    withStorage(function (result) {
       var comments = result.copyIdComments || [];
 
       while (copyIdCommentList.children.length > 1) {
@@ -139,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   setCompletedBtn.addEventListener('click', function () {
     setCompletedStatus.textContent = '';
-    chrome.storage.local.get('incResolutionTemplates', function (result) {
+    withStorage(function (result) {
       var templates = result.incResolutionTemplates || [];
 
       // Rebuild list keeping "No INC Resolution" as the first item
@@ -181,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function () {
     viewMail.style.display = 'block';
     setCompletedBtn.disabled = true;
     setCompletedStatus.style.color = '#555';
-    setCompletedStatus.textContent = 'Working\u2026';
+    setCompletedStatus.textContent = 'Working…';
 
     chrome.runtime.sendMessage({ action: 'setCompleted', incResolution: incResolution }, function (response) {
       if (response && response.success) {
@@ -207,40 +234,7 @@ document.addEventListener('DOMContentLoaded', function () {
     sendMailWithTemplate(null);
   });
 
-  chrome.storage.local.get('mailTemplates', function (result) {
-    var templates = result.mailTemplates || [];
-    templates.forEach(function (template) {
-      var li = document.createElement('li');
-      li.className = 'template-item';
-      li.innerHTML =
-        '<div class="template-name">' + escapeHtml(template.name) + '</div>' +
-        '<div class="template-preview">' +
-          escapeHtml(template.body.substring(0, 70)) +
-          (template.body.length > 70 ? '...' : '') +
-        '</div>';
-      li.addEventListener('click', function () {
-        sendMailWithTemplate(template.body);
-      });
-      templateList.appendChild(li);
-    });
-  });
-
   // -- Log Time --
-
-  var logTimeBtn = document.getElementById('log-time-btn');
-  var viewTimeEntry = document.getElementById('view-time-entry');
-  var backTimeEntryBtn = document.getElementById('back-time-entry-btn');
-  var submitTimeEntryBtn = document.getElementById('submit-time-entry-btn');
-  var teDateInput = document.getElementById('te-date');
-  var teStartInput = document.getElementById('te-start');
-  var teEndInput = document.getElementById('te-end');
-  var teProfileSelect = document.getElementById('te-profile');
-  var teCommentTextarea = document.getElementById('te-comment');
-  var teTemplatesDiv = document.getElementById('te-templates');
-  var tePrefixDiv = document.getElementById('te-prefix');
-  var teStatusDiv = document.getElementById('te-status');
-  var teSapCookieInput = document.getElementById('te-sap-cookie');
-  var teFetchCookieBtn = document.getElementById('te-fetch-cookie-btn');
 
   teFetchCookieBtn.addEventListener('click', function() {
     teFetchCookieBtn.disabled = true;
@@ -304,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var oneH = document.querySelector('.te-dur-chip[data-min="60"]');
     if (oneH) oneH.classList.add('active');
 
-    chrome.storage.local.get(['timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'], function(result) {
+    withStorage(function(result) {
       var profiles = result.timeProfiles || [];
       var templates = result.timeCommentTemplates || [];
       var empNum = result.employeeNumber || '';
@@ -413,6 +407,40 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   });
+
+  function populateMailTemplates(templates) {
+    templates.forEach(function (template) {
+      var li = document.createElement('li');
+      li.className = 'template-item';
+      li.innerHTML =
+        '<div class="template-name">' + escapeHtml(template.name) + '</div>' +
+        '<div class="template-preview">' +
+          escapeHtml(template.body.substring(0, 70)) +
+          (template.body.length > 70 ? '...' : '') +
+        '</div>';
+      li.addEventListener('click', function () {
+        sendMailWithTemplate(template.body);
+      });
+      templateList.appendChild(li);
+    });
+  }
+
+  // Returns the cached storage result synchronously if available, otherwise
+  // reads all keys from storage and caches them before calling fn.
+  function withStorage(fn) {
+    if (storageCache) {
+      fn(storageCache);
+    } else {
+      chrome.storage.local.get(
+        ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
+         'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'],
+        function (result) {
+          storageCache = result;
+          fn(result);
+        }
+      );
+    }
+  }
 
   function sendMailWithTemplate(body) {
     chrome.runtime.sendMessage({ action: 'sendMail', templateBody: body });

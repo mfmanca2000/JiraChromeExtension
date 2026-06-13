@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Keep the service worker alive so the popup opens without a cold-start delay.
+// The alarm fires every ~24 seconds, below Chrome's 30-second idle threshold.
+chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
+chrome.alarms.onAlarm.addListener(function() {});
+
 // In MV3, we need to use chrome.storage instead of localStorage
 function getCustomMailtoUrl() {
   return new Promise((resolve) => {
@@ -118,6 +123,58 @@ function extractIssueKey(url) {
   const match = url.match(/\/browse\/([A-Z]+-\d+)/i);
   return match ? match[1] : null;
 }
+
+// -- Issue info cache (chrome.storage.session survives SW restarts, cleared on Chrome close) --
+
+function cacheIssueInfo(issueKey, itsm) {
+  return chrome.storage.session.set({
+    ['issueInfo_' + issueKey]: { itsm: itsm, op: issueKey, ts: Date.now() }
+  });
+}
+
+async function getCachedIssueInfo(issueKey) {
+  const key = 'issueInfo_' + issueKey;
+  const result = await chrome.storage.session.get(key);
+  const entry = result[key];
+  if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) {
+    return entry;
+  }
+  return null;
+}
+
+async function prefetchIssueInfo(tab) {
+  if (!tab || !tab.url) return;
+  const issueKey = extractIssueKey(tab.url);
+  if (!issueKey) return;
+  if (await getCachedIssueInfo(issueKey)) return;
+  try {
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521`, {
+      credentials: 'include'
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const raw = data.fields && data.fields.customfield_10521;
+    await cacheIssueInfo(issueKey, raw ? String(raw).trim() : '');
+  } catch (e) {
+    // Pre-fetch errors are silently ignored; the popup will fetch on demand.
+  }
+}
+
+// Pre-fetch issue info whenever the user switches to or loads a JIRA tab so
+// that clicking "Log Time" can return the cached result instantly.
+chrome.tabs.onActivated.addListener(async function(activeInfo) {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    prefetchIssueInfo(tab);
+  } catch (e) {}
+});
+
+chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+  if (changeInfo.status === 'complete' && tab.active) {
+    prefetchIssueInfo(tab);
+  }
+});
 
 // Fetches available transitions for an issue and returns the ID of the one
 // whose target status matches targetStatusName.
@@ -256,6 +313,7 @@ async function handleAddLabel(label, sendResponse) {
 }
 
 // Returns the itsm (INC number) and issue key for the current Jira tab.
+// Checks the session cache first; falls back to a JIRA API call on a cache miss.
 async function handleGetIssueInfo(sendResponse) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -265,6 +323,13 @@ async function handleGetIssueInfo(sendResponse) {
       sendResponse({ success: false, error: 'Not a JIRA issue page' });
       return;
     }
+
+    const cached = await getCachedIssueInfo(issueKey);
+    if (cached) {
+      sendResponse({ success: true, itsm: cached.itsm, op: cached.op });
+      return;
+    }
+
     const base = 'https://issue.swisscom.ch/rest/api/2';
     const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521`, {
       credentials: 'include'
@@ -273,6 +338,7 @@ async function handleGetIssueInfo(sendResponse) {
     const data = await res.json();
     const raw = data.fields && data.fields.customfield_10521;
     const itsm = raw ? String(raw).trim() : '';
+    await cacheIssueInfo(issueKey, itsm);
     sendResponse({ success: true, itsm, op: issueKey });
   } catch (err) {
     sendResponse({ success: false, error: err.message });

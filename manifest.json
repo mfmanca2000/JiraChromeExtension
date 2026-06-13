@@ -14,7 +14,8 @@
     "scripting",
     "clipboardWrite",
     "storage",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "alarms"
   ],
   "host_permissions": [
     "https://issue.swisscom.ch/*",
