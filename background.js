@@ -347,6 +347,8 @@ async function handleGetIssueInfo(sendResponse) {
 
 
 // Builds and POSTs a time entry to the SAP time tracker.
+// Automatically retries with a 15-minute shift when SAP reports a slot conflict,
+// skipping over the mandatory 12:00–13:00 lunch break if the shift lands there.
 async function handleLogTime(payload, sendResponse) {
   try {
     const stored = await new Promise(resolve =>
@@ -368,68 +370,36 @@ async function handleLogTime(payload, sendResponse) {
     const sessionId = (payload.sapCookies || '').trim();
     await new Promise(resolve => chrome.storage.local.set({ sapCookies: sessionId }, resolve));
 
-    const [year, month, day] = payload.date.split('-').map(Number);
-    const [startH, startM] = payload.startTime.split(':').map(Number);
-    const [endH, endM] = payload.endTime.split(':').map(Number);
-
-    const prefix = payload.itsm ? payload.itsm + ':' + payload.op : payload.op;
-    const fullText = payload.comment ? prefix + ': ' + payload.comment : prefix;
-
-    // SAP quirk: embed local h:m directly as UTC milliseconds for Start/EndDate.
-    function sapDate(y, mo, d, h, m) {
-      return '/Date(' + Date.UTC(y, mo - 1, d, h, m, 0) + ')/';
-    }
-    function sapDuration(h, m) {
-      return 'PT' + String(h).padStart(2, '0') + 'H' + String(m).padStart(2, '0') + 'M00S';
-    }
-    // start_date: real UTC timestamp of local midnight (used as day anchor).
-    const startOfDayMs = new Date(year, month - 1, day, 0, 0, 0).getTime();
-
-    const sapPayload = {
-      Profile: 'SC01',
-      Mode: '',
-      EmployeeNumber: employeeNumber,
-      StartDate: sapDate(year, month, day, startH, startM),
-      EndDate: sapDate(year, month, day, endH, endM),
-      StartTime: sapDuration(startH, startM),
-      EndTime: sapDuration(endH, endM),
-      DayFlag: 'Time',
-      BreakStart: 'PT00H00M00S',
-      BreakEnd: 'PT00H00M00S',
-      TimeType: '',
-      LstarKey: profile.lstarKey,
-      LstarValue: '',
-      TargetElementType: profile.targetElementType || 'KAUFTR',
-      TargetElementKey: profile.psp,
-      TargetElementValue: '',
-      SubElementKey: profile.position || '',
-      SubElementValue: '',
-      SubSubElementKey: '',
-      SubSubElementValue: '',
-      CalcMotiveKey: '',
-      CalcMotiveValue: '',
-      FinConf: false,
-      TasktypeKey: '',
-      TasktypeValue: '',
-      text: fullText,
-      start_date: '/Date(' + startOfDayMs + ')/',
-      Fieldglass: ''
-    };
-
     if (!sessionId) {
       sendResponse({ success: false, error: 'SAP Session ID is empty. Paste it in the Session ID field.' });
       return;
     }
 
+    const [year, month, day] = payload.date.split('-').map(Number);
+    let [startH, startM] = payload.startTime.split(':').map(Number);
+    let [endH, endM] = payload.endTime.split(':').map(Number);
+
+    const prefix = payload.itsm ? payload.itsm + ':' + payload.op : payload.op;
+    const fullText = payload.comment ? prefix + ': ' + payload.comment : prefix;
+
+    // SAP quirk: embed local h:m directly as UTC milliseconds for Start/EndDate.
+    const pad = n => String(n).padStart(2, '0');
+    function sapDate(y, mo, d, h, m) {
+      return '/Date(' + Date.UTC(y, mo - 1, d, h, m, 0) + ')/';
+    }
+    function sapDuration(h, m) {
+      return 'PT' + pad(h) + 'H' + pad(m) + 'M00S';
+    }
+    // start_date: real UTC timestamp of local midnight (used as day anchor).
+    const startOfDayMs = new Date(year, month - 1, day, 0, 0, 0).getTime();
+
     // Build full Cookie header: prefix with cookie name + add companion cookies to avoid Negotiate re-challenge.
     const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
     const dt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     const negoTs = dt.replace(/ /g, '%20').replace(/:/g, '%3a');
     const fullCookieStr = `SAP_SESSIONID_P3L_100=${sessionId}; SPNegoTokenRequested=${negoTs}; sap-usercontext=sap-client=100`;
 
     console.log('[SAP] session ID length:', sessionId.length, '| preview:', sessionId.substring(0, 30) + '…');
-    console.log('[SAP] full cookie:', fullCookieStr.substring(0, 120) + '…');
 
     const DNR_RULE_ID = 42;
     try {
@@ -466,12 +436,7 @@ async function handleLogTime(payload, sendResponse) {
           'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/?sap-client=100',
           { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } }
         );
-        console.log('[SAP] CSRF status:', csrfRes.status,
-          '| redirected:', csrfRes.redirected,
-          '| final url:', csrfRes.url);
-        console.log('[SAP] CSRF response headers:',
-          Object.fromEntries(csrfRes.headers.entries()));
-
+        console.log('[SAP] CSRF status:', csrfRes.status);
         if (csrfRes.status === 401) {
           sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
           return;
@@ -490,29 +455,99 @@ async function handleLogTime(payload, sendResponse) {
       };
       if (csrfToken) postHeaders['x-csrf-token'] = csrfToken;
 
-      console.log('[SAP] posting time entry…');
-      const res = await fetch(
-        'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100',
-        { method: 'POST', credentials: 'omit', headers: postHeaders, body: JSON.stringify(sapPayload) }
-      );
-      console.log('[SAP] POST status:', res.status,
-        '| redirected:', res.redirected,
-        '| final url:', res.url);
+      // Retry loop: on a slot conflict, shift 15 minutes later (max 16 attempts = 4 hours).
+      const MAX_RETRIES = 16;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const sapPayload = {
+          Profile: 'SC01',
+          Mode: '',
+          EmployeeNumber: employeeNumber,
+          StartDate: sapDate(year, month, day, startH, startM),
+          EndDate: sapDate(year, month, day, endH, endM),
+          StartTime: sapDuration(startH, startM),
+          EndTime: sapDuration(endH, endM),
+          DayFlag: 'Time',
+          BreakStart: 'PT00H00M00S',
+          BreakEnd: 'PT00H00M00S',
+          TimeType: '',
+          LstarKey: profile.lstarKey,
+          LstarValue: '',
+          TargetElementType: profile.targetElementType || 'KAUFTR',
+          TargetElementKey: profile.psp,
+          TargetElementValue: '',
+          SubElementKey: profile.position || '',
+          SubElementValue: '',
+          SubSubElementKey: '',
+          SubSubElementValue: '',
+          CalcMotiveKey: '',
+          CalcMotiveValue: '',
+          FinConf: false,
+          TasktypeKey: '',
+          TasktypeValue: '',
+          text: fullText,
+          start_date: '/Date(' + startOfDayMs + ')/',
+          Fieldglass: ''
+        };
 
-      if (!res.ok) {
+        console.log(`[SAP] attempt ${attempt + 1}: posting ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
+        const res = await fetch(
+          'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100',
+          { method: 'POST', credentials: 'omit', headers: postHeaders, body: JSON.stringify(sapPayload) }
+        );
+        console.log('[SAP] POST status:', res.status);
+
+        if (res.ok) {
+          sendResponse({
+            success: true,
+            startTime: pad(startH) + ':' + pad(startM),
+            endTime: pad(endH) + ':' + pad(endM)
+          });
+          return;
+        }
+
         const body = await res.text();
         console.log('[SAP] POST error body:', body.substring(0, 500));
         let errMsg = `HTTP ${res.status}`;
+        let isConflict = (res.status === 409);
         try {
           const errJson = JSON.parse(body);
           if (errJson.error && errJson.error.message && errJson.error.message.value) {
             errMsg = errJson.error.message.value;
+            if (!isConflict) {
+              isConflict = /conflict|overlap|already.exist|duplicate|colli/i.test(errMsg);
+            }
           }
         } catch (e) { /* use status code */ }
-        throw new Error(errMsg);
-      }
 
-      sendResponse({ success: true });
+        if (!isConflict || attempt === MAX_RETRIES) {
+          throw new Error(errMsg);
+        }
+
+        // Slot is taken — shift both boundaries 15 minutes later.
+        const newStartMin = startH * 60 + startM + 15;
+        startH = Math.floor(newStartMin / 60) % 24;
+        startM = newStartMin % 60;
+        const newEndMin = endH * 60 + endM + 15;
+        endH = Math.floor(newEndMin / 60) % 24;
+        endM = newEndMin % 60;
+
+        // If the shift lands inside the mandatory lunch break (12:00–13:00),
+        // jump to 13:00 and shift the end by the same amount.
+        if (startH === 12) {
+          const lunchSkip = 60 - startM; // minutes until 13:00
+          startH = 13;
+          startM = 0;
+          const skippedEndMin = endH * 60 + endM + lunchSkip;
+          endH = Math.floor(skippedEndMin / 60) % 24;
+          endM = skippedEndMin % 60;
+        }
+
+        if (endH >= 20) {
+          throw new Error(`No free slot found before 20:00 — check your SAP entries manually. Last error: ${errMsg}`);
+        }
+
+        console.log(`[SAP] conflict — retrying at ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
+      }
     } finally {
       chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [DNR_RULE_ID] });
       console.log('[SAP] DNR rule removed');

@@ -39,7 +39,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var storageCache = null;
   chrome.storage.local.get(
     ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
-     'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'],
+     'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies',
+     'lastEndTime', 'lastEndDate'],
     function (result) {
       storageCache = result;
       populateMailTemplates(result.mailTemplates || []);
@@ -291,18 +292,33 @@ document.addEventListener('DOMContentLoaded', function () {
     teDateInput.value = today.getFullYear() + '-' +
       String(today.getMonth() + 1).padStart(2, '0') + '-' +
       String(today.getDate()).padStart(2, '0');
-    teStartInput.value = '09:00';
-    teEndInput.value = '10:00';
     teCommentTextarea.value = '';
     clearDurChips();
     var oneH = document.querySelector('.te-dur-chip[data-min="60"]');
     if (oneH) oneH.classList.add('active');
 
     withStorage(function(result) {
+      var nextStart = calcNextStartTime(result.lastEndTime, result.lastEndDate);
+      teStartInput.value = nextStart;
+      teEndInput.value = addMinutesToTime(nextStart, 60);
+
       var profiles = result.timeProfiles || [];
       var templates = result.timeCommentTemplates || [];
       var empNum = result.employeeNumber || '';
       teSapCookieInput.value = result.sapCookies || '';
+
+      // Auto-fetch a fresh cookie from the bridge on every open.
+      chrome.runtime.sendMessage({ action: 'getEdgeSapCookie' }, function(response) {
+        if (response && response.success) {
+          teSapCookieInput.value = response.sessionId;
+          teStatusDiv.style.color = 'green';
+          teStatusDiv.textContent = 'Session ID auto-fetched from Edge';
+          setTimeout(function() { teStatusDiv.textContent = ''; }, 2000);
+        } else {
+          teStatusDiv.style.color = '#e65100';
+          teStatusDiv.textContent = 'Bridge not running — start bridge/start.bat in Edge first';
+        }
+      });
 
       teProfileSelect.innerHTML = '';
       if (profiles.length === 0) {
@@ -395,11 +411,16 @@ document.addEventListener('DOMContentLoaded', function () {
       sapCookies: teSapCookieInput.value.trim()
     }, function(response) {
       if (response && response.success) {
+        var usedStart = response.startTime || startTime;
+        var usedEnd = response.endTime || endTime;
+        chrome.storage.local.set({ lastEndTime: usedEnd, lastEndDate: date });
         viewTimeEntry.style.display = 'none';
         viewMail.style.display = 'block';
         setCompletedStatus.style.color = 'green';
-        setCompletedStatus.textContent = 'Time entry submitted!';
-        setTimeout(function() { window.close(); }, 1200);
+        setCompletedStatus.textContent = usedStart !== startTime
+          ? 'Submitted at ' + usedStart + '–' + usedEnd + ' (slot shifted)'
+          : 'Time entry submitted!';
+        setTimeout(function() { window.close(); }, 1500);
       } else {
         teStatusDiv.style.color = 'red';
         teStatusDiv.textContent = (response && response.error) || 'Unknown error';
@@ -407,6 +428,33 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   });
+
+  // Returns the suggested start time for today's next log entry.
+  // Falls back to 08:30 when there's no saved entry for today.
+  // Adds a mandatory 1-hour lunch break when the last entry ended between 12:00 and 13:00.
+  function calcNextStartTime(lastEndTime, lastEndDate) {
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' +
+      String(today.getMonth() + 1).padStart(2, '0') + '-' +
+      String(today.getDate()).padStart(2, '0');
+    if (!lastEndTime || lastEndDate !== todayStr) {
+      return '08:30';
+    }
+    var parts = lastEndTime.split(':');
+    var h = parseInt(parts[0]);
+    var m = parseInt(parts[1]);
+    if (h >= 12 && h < 13) {
+      h += 1; // enforce 1-hour lunch break
+    }
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  function addMinutesToTime(timeStr, minutes) {
+    var parts = timeStr.split(':');
+    var totalMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) + minutes;
+    return String(Math.floor(totalMin / 60) % 24).padStart(2, '0') + ':' +
+           String(totalMin % 60).padStart(2, '0');
+  }
 
   function populateMailTemplates(templates) {
     templates.forEach(function (template) {
@@ -433,7 +481,8 @@ document.addEventListener('DOMContentLoaded', function () {
     } else {
       chrome.storage.local.get(
         ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
-         'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies'],
+         'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies',
+         'lastEndTime', 'lastEndDate'],
         function (result) {
           storageCache = result;
           fn(result);
