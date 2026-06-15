@@ -18,6 +18,7 @@ function main() {
   renderLabelTemplates();
   renderCopyIdComments();
   renderEmployeeNumber();
+  renderDefaultStartTime();
   renderTimeProfiles();
   renderTimeCommentTemplates();
 
@@ -172,6 +173,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('copy-id-comment-save-btn').addEventListener('click', saveCopyIdCommentForm);
   document.getElementById('copy-id-comment-cancel-btn').addEventListener('click', cancelCopyIdCommentForm);
   document.getElementById('save-employee-number-btn').addEventListener('click', saveEmployeeNumber);
+  document.getElementById('save-default-start-time-btn').addEventListener('click', saveDefaultStartTime);
   document.getElementById('add-time-profile-btn').addEventListener('click', openAddTimeProfileForm);
   document.getElementById('time-profile-save-btn').addEventListener('click', saveTimeProfileForm);
   document.getElementById('time-profile-cancel-btn').addEventListener('click', cancelTimeProfileForm);
@@ -517,6 +519,25 @@ function saveEmployeeNumber() {
   var num = document.getElementById('employee-number').value.trim();
   chrome.storage.local.set({ employeeNumber: num }, function () {
     var status = document.getElementById('employee-number-status');
+    status.style.color = 'green';
+    status.textContent = 'Saved.';
+    setTimeout(function () { status.textContent = ''; }, 2000);
+  });
+}
+
+// ---- Default Start Time ----
+
+function renderDefaultStartTime() {
+  chrome.storage.local.get('defaultStartTime', function (result) {
+    document.getElementById('default-start-time').value = result.defaultStartTime || '08:30';
+  });
+}
+
+function saveDefaultStartTime() {
+  var val = document.getElementById('default-start-time').value;
+  if (!val) val = '08:30';
+  chrome.storage.local.set({ defaultStartTime: val }, function () {
+    var status = document.getElementById('default-start-time-status');
     status.style.color = 'green';
     status.textContent = 'Saved.';
     setTimeout(function () { status.textContent = ''; }, 2000);

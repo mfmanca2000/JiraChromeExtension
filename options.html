@@ -242,6 +242,19 @@
   </div>
 
   <div class="section">
+    <div class="section-title">Time Tracker &mdash; Default Start Time</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Fallback start time used when no entry has been logged today (default: 08:30).
+    </p>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="time" id="default-start-time" value="08:30"
+        style="font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px;">
+      <button class="btn btn-primary" id="save-default-start-time-btn">Save</button>
+    </div>
+    <div id="default-start-time-status" style="font-size:9pt; margin-top:4px; min-height:14px;"></div>
+  </div>
+
+  <div class="section">
     <div class="section-title">Time Entry Profiles</div>
     <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
       Saved combinations of Type de prestation, PSP element, and position for quick selection when logging time.

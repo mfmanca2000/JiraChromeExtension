@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.storage.local.get(
     ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
      'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies',
-     'lastEndTime', 'lastEndDate'],
+     'lastEndTime', 'lastEndDate', 'defaultStartTime'],
     function (result) {
       storageCache = result;
       populateMailTemplates(result.mailTemplates || []);
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var currentPrefix = issueKeyMatch ? issueKeyMatch[1].replace(/-\d+$/, '') : null;
 
     withStorage(function(result) {
-      var nextStart = calcNextStartTime(result.lastEndTime, result.lastEndDate);
+      var nextStart = calcNextStartTime(result.lastEndTime, result.lastEndDate, result.defaultStartTime);
       teStartInput.value = nextStart;
       teEndInput.value = addMinutesToTime(nextStart, 60);
 
@@ -451,13 +451,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // Returns the suggested start time for today's next log entry.
   // Falls back to 08:30 when there's no saved entry for today.
   // Adds a mandatory 1-hour lunch break when the last entry ended between 12:00 and 13:00.
-  function calcNextStartTime(lastEndTime, lastEndDate) {
+  function calcNextStartTime(lastEndTime, lastEndDate, defaultStartTime) {
     var today = new Date();
     var todayStr = today.getFullYear() + '-' +
       String(today.getMonth() + 1).padStart(2, '0') + '-' +
       String(today.getDate()).padStart(2, '0');
     if (!lastEndTime || lastEndDate !== todayStr) {
-      return '08:30';
+      return defaultStartTime || '08:30';
     }
     var parts = lastEndTime.split(':');
     var h = parseInt(parts[0]);
@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', function () {
       chrome.storage.local.get(
         ['mailTemplates', 'labelTemplates', 'copyIdComments', 'incResolutionTemplates',
          'timeProfiles', 'timeCommentTemplates', 'employeeNumber', 'sapCookies',
-         'lastEndTime', 'lastEndDate'],
+         'lastEndTime', 'lastEndDate', 'defaultStartTime'],
         function (result) {
           storageCache = result;
           fn(result);
