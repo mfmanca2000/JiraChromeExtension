@@ -266,6 +266,10 @@
       <input type="text" id="time-profile-position" placeholder="e.g. 30 (leave empty if not applicable)">
       <label for="time-profile-jira-projects">Jira project prefixes <span style="font-weight:normal;color:#888">- optional, comma-separated</span></label>
       <input type="text" id="time-profile-jira-projects" placeholder="e.g. OPBCGE, BCGE">
+      <label style="display:flex; align-items:center; gap:6px; font-weight:normal; margin-bottom:8px; cursor:pointer;">
+        <input type="checkbox" id="time-profile-prepend-id" checked>
+        Prepend INCxxx:OPyyy to time log description
+      </label>
       <div>
         <button class="btn btn-primary" id="time-profile-save-btn">Save</button>
         &nbsp;

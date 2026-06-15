@@ -374,13 +374,17 @@ document.addEventListener('DOMContentLoaded', function () {
         chrome.runtime.sendMessage({action: 'getIssueInfo'}, function(response) {
           if (response && response.success) {
             currentIssueInfo = {itsm: response.itsm, op: response.op};
-            tePrefixDiv.textContent = (response.itsm ? response.itsm + ':' : '') + response.op + ': …';
+            updatePrefixDisplay(profiles);
           } else {
             tePrefixDiv.textContent = (response && response.error) || 'Could not load issue info';
             tePrefixDiv.style.color = '#c62828';
           }
         });
       }
+
+      teProfileSelect.addEventListener('change', function() {
+        updatePrefixDisplay(profiles);
+      });
 
       viewMail.style.display = 'none';
       viewTimeEntry.style.display = 'block';
@@ -462,6 +466,19 @@ document.addEventListener('DOMContentLoaded', function () {
       h += 1; // enforce 1-hour lunch break
     }
     return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  function updatePrefixDisplay(profiles) {
+    if (!currentIssueInfo) return;
+    var profileIndex = parseInt(teProfileSelect.value);
+    var profile = profiles && profiles[profileIndex];
+    if (profile && profile.prependId === false) {
+      tePrefixDiv.textContent = '(comment only, no ID prefix)';
+      tePrefixDiv.style.color = '#888';
+    } else {
+      tePrefixDiv.textContent = (currentIssueInfo.itsm ? currentIssueInfo.itsm + ':' : '') + currentIssueInfo.op + ': …';
+      tePrefixDiv.style.color = '#333';
+    }
   }
 
   function addMinutesToTime(timeStr, minutes) {

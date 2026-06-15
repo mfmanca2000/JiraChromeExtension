@@ -380,7 +380,9 @@ async function handleLogTime(payload, sendResponse) {
     let [endH, endM] = payload.endTime.split(':').map(Number);
 
     const prefix = payload.itsm ? payload.itsm + ':' + payload.op : payload.op;
-    const fullText = payload.comment ? prefix + ': ' + payload.comment : prefix;
+    const fullText = profile.prependId === false
+      ? (payload.comment || '')
+      : (payload.comment ? prefix + ': ' + payload.comment : prefix);
 
     // SAP quirk: embed local h:m directly as UTC milliseconds for Start/EndDate.
     const pad = n => String(n).padStart(2, '0');

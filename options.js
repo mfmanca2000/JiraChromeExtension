@@ -552,7 +552,7 @@ function renderTimeProfiles() {
         '<div class="template-entry-info">' +
           '<div class="template-entry-name">' + escapeHtml(p.name) + '</div>' +
           '<div class="template-entry-preview">' +
-            escapeHtml('Type: ' + p.lstarKey + (p.psp ? ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp : '') + (p.position ? ' | Pos: ' + p.position : '') + (p.jiraProjects && p.jiraProjects.length ? ' | Projects: ' + p.jiraProjects.join(', ') : '')) +
+            escapeHtml('Type: ' + p.lstarKey + (p.psp ? ' | ' + (p.targetElementType || 'KAUFTR') + ': ' + p.psp : '') + (p.position ? ' | Pos: ' + p.position : '') + (p.jiraProjects && p.jiraProjects.length ? ' | Projects: ' + p.jiraProjects.join(', ') : '') + (p.prependId === false ? ' | No ID prefix' : '')) +
           '</div>' +
         '</div>' +
         '<div class="template-entry-actions">' +
@@ -584,6 +584,7 @@ function openAddTimeProfileForm() {
   document.getElementById('time-profile-psp').value = '';
   document.getElementById('time-profile-position').value = '';
   document.getElementById('time-profile-jira-projects').value = '';
+  document.getElementById('time-profile-prepend-id').checked = true;
   document.getElementById('time-profile-form').style.display = 'block';
   document.getElementById('time-profile-name').focus();
 }
@@ -598,6 +599,7 @@ function openEditTimeProfileForm(index) {
     document.getElementById('time-profile-psp').value = p.psp || '';
     document.getElementById('time-profile-position').value = p.position || '';
     document.getElementById('time-profile-jira-projects').value = (p.jiraProjects || []).join(', ');
+    document.getElementById('time-profile-prepend-id').checked = p.prependId !== false;
     document.getElementById('time-profile-form').style.display = 'block';
     document.getElementById('time-profile-name').focus();
   });
@@ -611,13 +613,14 @@ function saveTimeProfileForm() {
   var position = document.getElementById('time-profile-position').value.trim();
   var jiraProjects = document.getElementById('time-profile-jira-projects').value
     .split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+  var prependId = document.getElementById('time-profile-prepend-id').checked;
   var editId = document.getElementById('time-profile-edit-id').value;
 
   if (!name) { alert('Please enter a profile name.'); return; }
   if (!lstarKey) { alert('Please enter the Type de prestation code.'); return; }
 
   loadTimeProfiles(function (profiles) {
-    var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position, jiraProjects: jiraProjects };
+    var entry = { id: String(Date.now()), name: name, lstarKey: lstarKey, targetElementType: targetElementType, psp: psp, position: position, jiraProjects: jiraProjects, prependId: prependId };
     if (editId === '') {
       profiles.push(entry);
     } else {
