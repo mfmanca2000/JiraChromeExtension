@@ -94,7 +94,7 @@ chrome.runtime.onConnect.addListener(function (port) {
   port.onMessage.addListener(function (info) {
     // Handle copyId action: copy the ID (with optional suffix) to clipboard and respond.
     if (copyIdCallback) {
-      const idText = info.itsm + ":" + info.op + (copyIdSuffix ? " " + copyIdSuffix : "");
+      const idText = (info.itsm ? info.itsm + ':' : '') + info.op + (copyIdSuffix ? " " + copyIdSuffix : "");
       copyTextInTab(tab.id, idText)
         .then(() => copyIdCallback({ success: true }))
         .catch((err) => copyIdCallback({ success: false, error: err.message }));
@@ -114,7 +114,7 @@ chrome.runtime.onConnect.addListener(function (port) {
 
     executeMailto(tab.id, info.mailto, info.title, body, info.selection);
 
-    copyTextInTab(tab.id, info.itsm + ":" + info.op);
+    copyTextInTab(tab.id, (info.itsm ? info.itsm + ':' : '') + info.op);
   });
 });
 
