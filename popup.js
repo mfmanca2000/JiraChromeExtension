@@ -374,11 +374,11 @@ document.addEventListener('DOMContentLoaded', function () {
         chrome.runtime.sendMessage({action: 'getIssueInfo'}, function(response) {
           if (response && response.success) {
             currentIssueInfo = {itsm: response.itsm, op: response.op};
-            updatePrefixDisplay(profiles);
           } else {
-            tePrefixDiv.textContent = (response && response.error) || 'Could not load issue info';
-            tePrefixDiv.style.color = '#c62828';
+            // Not on a Jira issue page — allow freeform entry without an issue ID
+            currentIssueInfo = {itsm: '', op: ''};
           }
+          updatePrefixDisplay(profiles);
         });
       }
 
@@ -474,6 +474,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var profile = profiles && profiles[profileIndex];
     if (profile && profile.prependId === false) {
       tePrefixDiv.textContent = '(comment only, no ID prefix)';
+      tePrefixDiv.style.color = '#888';
+    } else if (!currentIssueInfo.itsm && !currentIssueInfo.op) {
+      tePrefixDiv.textContent = '(freeform entry — comment only)';
       tePrefixDiv.style.color = '#888';
     } else {
       tePrefixDiv.textContent = (currentIssueInfo.itsm ? currentIssueInfo.itsm + ':' : '') + currentIssueInfo.op + ': …';

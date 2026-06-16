@@ -380,7 +380,7 @@ async function handleLogTime(payload, sendResponse) {
     let [endH, endM] = payload.endTime.split(':').map(Number);
 
     const prefix = payload.itsm ? payload.itsm + ':' + payload.op : payload.op;
-    const fullText = profile.prependId === false
+    const fullText = (profile.prependId === false || !prefix)
       ? (payload.comment || '')
       : (payload.comment ? prefix + ': ' + payload.comment : prefix);
 
