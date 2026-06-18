@@ -325,31 +325,40 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       });
 
-      teProfileSelect.innerHTML = '';
-      if (profiles.length === 0) {
-        var opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'No profiles - configure in options';
-        opt.disabled = true;
-        opt.selected = true;
-        teProfileSelect.appendChild(opt);
-      } else {
-        var matching = [];
-        var others = [];
-        profiles.forEach(function(p, i) {
-          if (currentPrefix && (p.jiraProjects || []).indexOf(currentPrefix) !== -1) {
-            matching.push({p: p, i: i});
-          } else {
-            others.push({p: p, i: i});
-          }
-        });
-        matching.concat(others).forEach(function(item) {
+      function populateProfileDropdown(isRFC) {
+        var currentType = isRFC ? 'rfc' : 'incident';
+        teProfileSelect.innerHTML = '';
+        if (profiles.length === 0) {
           var opt = document.createElement('option');
-          opt.value = String(item.i);
-          opt.textContent = item.p.name;
+          opt.value = '';
+          opt.textContent = 'No profiles - configure in options';
+          opt.disabled = true;
+          opt.selected = true;
           teProfileSelect.appendChild(opt);
-        });
+        } else {
+          var matching = [];
+          var others = [];
+          profiles.forEach(function(p, i) {
+            var item = {p: p, i: i, typeMatches: (p.profileType || 'incident') === currentType};
+            if (currentPrefix && (p.jiraProjects || []).indexOf(currentPrefix) !== -1) {
+              matching.push(item);
+            } else {
+              others.push(item);
+            }
+          });
+          function sortByType(group) {
+            return group.filter(function(x) { return x.typeMatches; })
+                        .concat(group.filter(function(x) { return !x.typeMatches; }));
+          }
+          sortByType(matching).concat(sortByType(others)).forEach(function(item) {
+            var opt = document.createElement('option');
+            opt.value = String(item.i);
+            opt.textContent = item.p.name;
+            teProfileSelect.appendChild(opt);
+          });
+        }
       }
+      populateProfileDropdown(false);
 
       teTemplatesDiv.innerHTML = '';
       templates.forEach(function(t) {
@@ -374,6 +383,7 @@ document.addEventListener('DOMContentLoaded', function () {
         chrome.runtime.sendMessage({action: 'getIssueInfo'}, function(response) {
           if (response && response.success) {
             currentIssueInfo = {itsm: response.itsm, op: response.op};
+            if (response.isRFC) populateProfileDropdown(true);
           } else {
             // Not on a Jira issue page — allow freeform entry without an issue ID
             currentIssueInfo = {itsm: '', op: ''};

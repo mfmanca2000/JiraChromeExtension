@@ -126,9 +126,9 @@ function extractIssueKey(url) {
 
 // -- Issue info cache (chrome.storage.session survives SW restarts, cleared on Chrome close) --
 
-function cacheIssueInfo(issueKey, itsm) {
+function cacheIssueInfo(issueKey, itsm, isRFC) {
   return chrome.storage.session.set({
-    ['issueInfo_' + issueKey]: { itsm: itsm, op: issueKey, ts: Date.now() }
+    ['issueInfo_' + issueKey]: { itsm: itsm, op: issueKey, isRFC: !!isRFC, ts: Date.now() }
   });
 }
 
@@ -149,13 +149,14 @@ async function prefetchIssueInfo(tab) {
   if (await getCachedIssueInfo(issueKey)) return;
   try {
     const base = 'https://issue.swisscom.ch/rest/api/2';
-    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521`, {
+    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521,issuetype`, {
       credentials: 'include'
     });
     if (!res.ok) return;
     const data = await res.json();
     const raw = data.fields && data.fields.customfield_10521;
-    await cacheIssueInfo(issueKey, raw ? String(raw).trim() : '');
+    const isRFC = !!(data.fields && data.fields.issuetype && data.fields.issuetype.name === 'Request for Change');
+    await cacheIssueInfo(issueKey, raw ? String(raw).trim() : '', isRFC);
   } catch (e) {
     // Pre-fetch errors are silently ignored; the popup will fetch on demand.
   }
@@ -326,20 +327,21 @@ async function handleGetIssueInfo(sendResponse) {
 
     const cached = await getCachedIssueInfo(issueKey);
     if (cached) {
-      sendResponse({ success: true, itsm: cached.itsm, op: cached.op });
+      sendResponse({ success: true, itsm: cached.itsm, op: cached.op, isRFC: !!cached.isRFC });
       return;
     }
 
     const base = 'https://issue.swisscom.ch/rest/api/2';
-    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521`, {
+    const res = await fetch(`${base}/issue/${issueKey}?fields=customfield_10521,issuetype`, {
       credentials: 'include'
     });
     if (!res.ok) throw new Error(`Could not fetch issue (HTTP ${res.status})`);
     const data = await res.json();
     const raw = data.fields && data.fields.customfield_10521;
     const itsm = raw ? String(raw).trim() : '';
-    await cacheIssueInfo(issueKey, itsm);
-    sendResponse({ success: true, itsm, op: issueKey });
+    const isRFC = !!(data.fields && data.fields.issuetype && data.fields.issuetype.name === 'Request for Change');
+    await cacheIssueInfo(issueKey, itsm, isRFC);
+    sendResponse({ success: true, itsm, op: issueKey, isRFC });
   } catch (err) {
     sendResponse({ success: false, error: err.message });
   }
