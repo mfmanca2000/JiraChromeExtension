@@ -313,6 +313,106 @@ async function handleAddLabel(label, sendResponse) {
   }
 }
 
+// Checks whether the current issue's assignee is already the logged-in user.
+async function handleGetAssignmentStatus(sendResponse) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    const issueKey = extractIssueKey(tab.url);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Not a JIRA issue page' });
+      return;
+    }
+
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+
+    const [meRes, issueRes] = await Promise.all([
+      fetch(`${base}/myself`, { credentials: 'include' }),
+      fetch(`${base}/issue/${issueKey}?fields=assignee`, { credentials: 'include' })
+    ]);
+    if (!meRes.ok) throw new Error(`Could not fetch current user (HTTP ${meRes.status})`);
+    if (!issueRes.ok) throw new Error(`Could not fetch issue (HTTP ${issueRes.status})`);
+
+    const me = await meRes.json();
+    const issueData = await issueRes.json();
+    const assignee = issueData.fields && issueData.fields.assignee;
+    const isAssignedToMe = !!assignee && (assignee.key === me.key || assignee.name === me.name);
+
+    sendResponse({ success: true, isAssignedToMe, currentUserName: me.displayName });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
+// Assigns the current issue to the logged-in user.
+async function handleAssignToMe(sendResponse) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    const issueKey = extractIssueKey(tab.url);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Not a JIRA issue page' });
+      return;
+    }
+
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+
+    const meRes = await fetch(`${base}/myself`, { credentials: 'include' });
+    if (!meRes.ok) throw new Error(`Could not fetch current user (HTTP ${meRes.status})`);
+    const me = await meRes.json();
+
+    // Assignment here isn't done by setting the standard "assignee" field —
+    // it's done via the self-looping "Edit Issue" transition (Assigned →
+    // Assigned), whose screen exposes the "INC Assignee" cascading-select
+    // custom field. A workflow post-function on that transition derives the
+    // standard Assignee and "INC Assignee Detail" fields from the selected
+    // option, mirroring the manual "Edit Issue" → Assignment tab flow.
+    const transRes = await fetch(`${base}/issue/${issueKey}/transitions?expand=transitions.fields`, {
+      credentials: 'include'
+    });
+    if (!transRes.ok) throw new Error(`Could not fetch transitions (HTTP ${transRes.status})`);
+    const transData = await transRes.json();
+    const editTransition = transData.transitions.find(t => t.name === 'Edit Issue');
+    if (!editTransition) throw new Error('"Edit Issue" transition not available from the current status');
+
+    const incAssigneeField = editTransition.fields && Object.values(editTransition.fields)
+      .find(f => f.name === 'INC Assignee');
+    if (!incAssigneeField) throw new Error('"INC Assignee" field not found on the "Edit Issue" transition');
+
+    // INC Assignee's options are plain-text names ("First Last") rather than
+    // user objects, while me.displayName is formatted "Last First, OrgUnit" —
+    // compare by word set (ignoring order and the org-unit suffix) instead
+    // of an exact string match so this works for whoever runs the extension.
+    const normalizeName = s => s.split(/\s+/).filter(Boolean).map(w => w.toLowerCase()).sort().join(' ');
+    const myNameWords = normalizeName(me.displayName.split(',')[0]);
+    const option = incAssigneeField.allowedValues.find(o => normalizeName(o.value) === myNameWords);
+    if (!option) throw new Error(`No "INC Assignee" option found for "${me.displayName}"`);
+
+    await postTransition(base, issueKey, editTransition.id, {
+      [incAssigneeField.fieldId]: { id: option.id }
+    });
+
+    // Assignment doesn't move the workflow on its own — push the ticket to
+    // "In Progress" too via the "Start Progress" transition, mirroring the
+    // manual workflow. Skip quietly if there's no such transition (e.g.
+    // already In Progress); surface any other failure instead of swallowing it.
+    let tid;
+    try {
+      tid = await getTransitionId(base, issueKey, 'In Progress');
+    } catch (e) {
+      tid = null;
+    }
+    if (tid) {
+      await postTransition(base, issueKey, tid);
+    }
+
+    sendResponse({ success: true });
+    chrome.tabs.reload(tab.id);
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 // Returns the itsm (INC number) and issue key for the current Jira tab.
 // Checks the session cache first; falls back to a JIRA API call on a cache miss.
 async function handleGetIssueInfo(sendResponse) {
@@ -594,6 +694,16 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
 
   if (message.action === 'setCompleted') {
     handleSetCompleted(message.incResolution || '', sendResponse);
+    return true; // keep channel open for async response
+  }
+
+  if (message.action === 'getAssignmentStatus') {
+    handleGetAssignmentStatus(sendResponse);
+    return true; // keep channel open for async response
+  }
+
+  if (message.action === 'assignToMe') {
+    handleAssignToMe(sendResponse);
     return true; // keep channel open for async response
   }
 

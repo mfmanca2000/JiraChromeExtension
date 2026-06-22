@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var labelList = document.getElementById('label-list');
   var backLabelBtn = document.getElementById('back-label-btn');
   var copyIdBtn = document.getElementById('copy-id-btn');
+  var assignToMeBtn = document.getElementById('assign-to-me-btn');
   var viewCopyId = document.getElementById('view-copy-id');
   var copyIdCommentList = document.getElementById('copy-id-comment-list');
   var noCopyIdCommentItem = document.getElementById('no-copy-id-comment');
@@ -46,6 +47,43 @@ document.addEventListener('DOMContentLoaded', function () {
       populateMailTemplates(result.mailTemplates || []);
     }
   );
+
+  // -- Assign to Me: pre-check assignment status so the button can be
+  // disabled when the ticket is already assigned to the current user --
+
+  assignToMeBtn.disabled = true;
+  chrome.runtime.sendMessage({ action: 'getAssignmentStatus' }, function (response) {
+    if (response && response.success) {
+      if (response.isAssignedToMe) {
+        assignToMeBtn.disabled = true;
+        assignToMeBtn.title = 'Already assigned to you';
+      } else {
+        assignToMeBtn.disabled = false;
+        assignToMeBtn.title = 'Assign to Me';
+      }
+    } else {
+      assignToMeBtn.disabled = true;
+      assignToMeBtn.title = (response && response.error) ? response.error : 'Not available';
+    }
+  });
+
+  assignToMeBtn.addEventListener('click', function () {
+    assignToMeBtn.disabled = true;
+    setCompletedStatus.style.color = '#555';
+    setCompletedStatus.textContent = 'Working…';
+
+    chrome.runtime.sendMessage({ action: 'assignToMe' }, function (response) {
+      if (response && response.success) {
+        setCompletedStatus.style.color = 'green';
+        setCompletedStatus.textContent = 'Assigned!';
+        setTimeout(function () { window.close(); }, 1000);
+      } else {
+        setCompletedStatus.style.color = 'red';
+        setCompletedStatus.textContent = (response && response.error) ? response.error : 'Unknown error';
+        assignToMeBtn.disabled = false;
+      }
+    });
+  });
 
   // -- Add Label: load label templates, then show picker --
 

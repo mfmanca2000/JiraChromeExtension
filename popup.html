@@ -82,6 +82,35 @@
       background-color: #aaa;
       cursor: default;
     }
+    .icon-btn {
+      font-size: 13px;
+      font-weight: bold;
+      color: #555;
+      background-color: transparent;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 26px;
+      height: 26px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .icon-btn:hover {
+      background-color: #f1f1f1;
+      border-color: #999;
+    }
+    .icon-btn:disabled {
+      color: #ccc;
+      border-color: #eee;
+      cursor: default;
+    }
+    .icon-row {
+      display: flex;
+      gap: 5px;
+    }
     .status-msg {
       font-size: 11px;
       margin-top: 4px;
@@ -114,15 +143,16 @@
       </li>
     </ul>
     <div class="footer">
-      <div style="display:flex;gap:5px;">
-        <button class="set-completed-btn" id="set-completed-btn">Set Resolved &rsaquo;</button>
-        <button class="set-completed-btn" id="add-label-btn">Add Label &rsaquo;</button>
-        <button class="set-completed-btn" id="copy-id-btn">Copy ID</button>
+      <div class="icon-row">
+        <button class="icon-btn" id="assign-to-me-btn" title="Assign to Me">&#128100;</button>
+        <button class="icon-btn" id="set-completed-btn" title="Set Resolved">&#10003;</button>
+        <button class="icon-btn" id="add-label-btn" title="Add Label">T</button>
+        <button class="icon-btn" id="copy-id-btn" title="Copy ID">&#128203;</button>
       </div>
       <button class="options-link" id="options-link">Options &rsaquo;</button>
     </div>
     <div style="margin-top:4px">
-      <button class="set-completed-btn" id="log-time-btn" style="background-color:#0f9d58">&#9200; Log Time &rsaquo;</button>
+      <button class="set-completed-btn" id="log-time-btn" style="background-color:#0f9d58;height:26px;box-sizing:border-box;width:100%">&#9200; Log Time &rsaquo;</button>
     </div>
   </div>
 
