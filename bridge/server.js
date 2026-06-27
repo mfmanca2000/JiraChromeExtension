@@ -34,7 +34,7 @@ const INDEX_HTML = `<!DOCTYPE html>
   <div class="section">
     <h3>Option 1 &mdash; Bookmarklet (one click)</h3>
     <p class="note">Drag the button below to your Edge bookmarks bar. Then click it on any loaded SAP page to send the cookie automatically.</p>
-    <a class="bookmarklet" href="${BOOKMARKLET}">&#8635; Send SAP Cookie</a>
+    <a class="bookmarklet" href="${BOOKMARKLET}">&#8635; Send cookie to Extension</a>
     <p class="note">If you get &ldquo;not found (httpOnly)&rdquo;, use Option 2.</p>
   </div>
 
