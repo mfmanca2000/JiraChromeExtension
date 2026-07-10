@@ -5,7 +5,18 @@
 // Keep the service worker alive so the popup opens without a cold-start delay.
 // The alarm fires every ~24 seconds, below Chrome's 30-second idle threshold.
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
-chrome.alarms.onAlarm.addListener(function() {});
+
+// Periodically re-counts unassigned issues on the configured board and badges
+// the toolbar icon with the count (see updateUnassignedBadge below).
+const ISSUES_BADGE_ALARM = 'jiraIssuesBadgeCheck';
+chrome.alarms.create(ISSUES_BADGE_ALARM, { periodInMinutes: 5 });
+
+chrome.alarms.onAlarm.addListener(function(alarm) {
+  if (alarm.name === ISSUES_BADGE_ALARM) updateUnassignedBadge();
+});
+
+chrome.runtime.onInstalled.addListener(function() { updateUnassignedBadge(); });
+chrome.runtime.onStartup.addListener(function() { updateUnassignedBadge(); });
 
 // In MV3, we need to use chrome.storage instead of localStorage
 function getCustomMailtoUrl() {
@@ -120,6 +131,7 @@ chrome.runtime.onConnect.addListener(function (port) {
 
 // Extracts the JIRA issue key (e.g. "PROJ-123") from a JIRA browse URL.
 function extractIssueKey(url) {
+  if (!url) return null;
   const match = url.match(/\/browse\/([A-Z]+-\d+)/i);
   return match ? match[1] : null;
 }
@@ -176,6 +188,177 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
     prefetchIssueInfo(tab);
   }
 });
+
+// -- Issues board screen (popup "Issues" tab + unassigned-count badge) --
+
+const ISSUES_BOARD_DEFAULTS = {
+  jiraRapidViewId: '2801',
+  jiraQuickFilterUnassigned: '14060',
+  jiraQuickFilterAssignedToMe: '14047',
+  jiraQuickFilterAssignedToMeRecent: '14048'
+};
+
+async function getIssuesBoardSettings() {
+  const stored = await chrome.storage.local.get(Object.keys(ISSUES_BOARD_DEFAULTS));
+  const out = {};
+  for (const k in ISSUES_BOARD_DEFAULTS) out[k] = stored[k] || ISSUES_BOARD_DEFAULTS[k];
+  return out;
+}
+
+// Quick filters aren't exposed by the modern Agile REST API - their JQL
+// definitions have to be read from the GreenHopper board-config endpoint
+// (requires board edit permission). Fetched once per screen load/badge check
+// and reused for all 3 configured filter IDs.
+async function fetchQuickFilterQueries(base, rapidViewId) {
+  const url = `${base}/rest/greenhopper/1.0/rapidviewconfig/editmodel.json?rapidViewId=${encodeURIComponent(rapidViewId)}`;
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Could not load quick filter definitions (HTTP ${res.status}) - board edit permission may be required`);
+  const data = await res.json();
+  const filters = (data.quickFilterConfig && data.quickFilterConfig.quickFilters) || [];
+  const map = {};
+  filters.forEach(f => { map[String(f.id)] = f.query; });
+  return map;
+}
+
+function lookupQuickFilterQuery(queryMap, id, label) {
+  const q = queryMap[String(id)];
+  if (!q) throw new Error(`Quick filter ${id} (${label}) not found on this board`);
+  return q;
+}
+
+// Runs a quick filter's JQL against the board via the modern Agile REST API,
+// which (unlike the legacy GreenHopper board-data endpoint) reliably returns
+// full field data directly - no separate search call needed. extraJql is
+// AND-ed in server-side, e.g. to exclude closed issues.
+async function fetchBoardIssuesForFilter(base, rapidViewId, jql, extraJql) {
+  const combined = extraJql ? `(${jql}) AND ${extraJql}` : jql;
+  const url = `${base}/rest/agile/1.0/board/${encodeURIComponent(rapidViewId)}/issue` +
+    `?jql=${encodeURIComponent(combined)}` +
+    `&fields=summary,created,updated,project,issuetype,customfield_11725,duedate,status&maxResults=200`;
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Board issue fetch failed (HTTP ${res.status})`);
+  const data = await res.json();
+  return data.issues || [];
+}
+
+// Unwraps the ITSM Target Date custom field defensively - confirmed to be a
+// plain ISO date string on this instance, but an object with a value/date
+// property is also handled in case that ever differs by project/config.
+function unwrapCustomDateField(v) {
+  if (v && typeof v === 'object') return v.value || v.date || null;
+  return v || null;
+}
+
+// Incidents use the "ITSM Target Date" custom field; RFCs use the standard
+// JIRA due date field. Matches the isRFC check already used elsewhere in
+// this file (handleGetIssueInfo/prefetchIssueInfo).
+function computeRelevantDate(fields) {
+  const isRFC = !!(fields.issuetype && fields.issuetype.name === 'Request for Change');
+  const raw = isRFC ? fields.duedate : unwrapCustomDateField(fields.customfield_11725);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function enrichIssue(issue) {
+  const f = issue.fields || {};
+  const relevantDate = computeRelevantDate(f);
+  return {
+    key: issue.key,
+    summary: f.summary || '',
+    created: f.created || null,
+    updated: f.updated || null,
+    projectKey: (f.project && f.project.key) || issue.key.split('-')[0],
+    status: (f.status && f.status.name) || '',
+    isRFC: !!(f.issuetype && f.issuetype.name === 'Request for Change'),
+    relevantDate: relevantDate ? relevantDate.toISOString() : null
+  };
+}
+
+const ISSUES_SCREEN_CACHE_KEY = 'issuesScreenData';
+// Slightly longer than the 5-minute badge alarm's period, so that alarm keeps
+// this cache continuously warm (see updateUnassignedBadge below) and popup
+// opens almost always hit the cache instead of live-fetching from Jira.
+const ISSUES_SCREEN_TTL_MS = 6 * 60 * 1000;
+
+// Builds the data for the popup's Issues tab: resolves the 3 configured quick
+// filters to their JQL, queries each directly via the Agile REST API, and
+// buckets the results into the 3 sections shown in the UI. Results are
+// cached briefly in session storage so reopening the popup doesn't refetch;
+// forceRefresh (the popup's refresh button) bypasses that cache.
+async function buildIssuesScreenData(forceRefresh) {
+  if (!forceRefresh) {
+    const cached = (await chrome.storage.session.get(ISSUES_SCREEN_CACHE_KEY))[ISSUES_SCREEN_CACHE_KEY];
+    if (cached && (Date.now() - cached.ts) < ISSUES_SCREEN_TTL_MS) return cached.data;
+  }
+
+  const base = 'https://issue.swisscom.ch';
+  const s = await getIssuesBoardSettings();
+  const queryMap = await fetchQuickFilterQueries(base, s.jiraRapidViewId);
+
+  const unassignedJql = lookupQuickFilterQuery(queryMap, s.jiraQuickFilterUnassigned, 'Unassigned');
+  const assignedJql = lookupQuickFilterQuery(queryMap, s.jiraQuickFilterAssignedToMe, 'Assigned to Me');
+  const recentJql = lookupQuickFilterQuery(queryMap, s.jiraQuickFilterAssignedToMeRecent, 'Assigned to Me - Recently Updated');
+
+  const [unassignedIssues, assignedIssuesAll, recentIssues] = await Promise.all([
+    fetchBoardIssuesForFilter(base, s.jiraRapidViewId, unassignedJql),
+    // Restrict to still-open issues server-side - the raw "assigned to me"
+    // quick filter has no resolution clause of its own, so without this the
+    // result includes years of closed tickets whose old due dates would
+    // otherwise flood the "due soon / overdue" section below.
+    fetchBoardIssuesForFilter(base, s.jiraRapidViewId, assignedJql, 'resolution = Unresolved'),
+    // The board's "Recently Updated" quick filter is just `updatedDate >= -1d`
+    // with no assignee clause of its own - on the real board it's meant to be
+    // stacked with "Only My Issues" (quick filters AND together when combined),
+    // so AND in the "assigned to me" JQL here to match that intent.
+    fetchBoardIssuesForFilter(base, s.jiraRapidViewId, recentJql, assignedJql)
+  ]);
+
+  const windowEnd = new Date();
+  windowEnd.setDate(windowEnd.getDate() + 3);
+  windowEnd.setHours(23, 59, 59, 999);
+
+  const unassigned = unassignedIssues.map(enrichIssue);
+  const assignedToMeAll = assignedIssuesAll.map(enrichIssue);
+  const assignedToMe = assignedToMeAll.filter(i => i.relevantDate && new Date(i.relevantDate) <= windowEnd);
+  const assignedToMeRecent = recentIssues.map(enrichIssue);
+
+  const data = { unassigned, assignedToMe, assignedToMeRecent, fetchedAt: Date.now() };
+  await chrome.storage.session.set({ [ISSUES_SCREEN_CACHE_KEY]: { data, ts: Date.now() } });
+  updateBadgeFromCount(unassigned.length);
+  return data;
+}
+
+async function handleGetIssuesScreenData(forceRefresh, sendResponse) {
+  try {
+    const data = await buildIssuesScreenData(!!forceRefresh);
+    sendResponse({ success: true, data });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
+async function updateBadgeFromCount(count) {
+  if (!count) {
+    await chrome.action.setBadgeText({ text: '' });
+    return;
+  }
+  await chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
+  await chrome.action.setBadgeText({ text: count > 99 ? '99+' : String(count) });
+}
+
+// Alarm-driven refresh: rebuilds the full Issues tab cache (badging the
+// toolbar with the unassigned count as a side effect of buildIssuesScreenData
+// above) so the cache stays warm and popup opens don't need to live-fetch.
+// No desktop notifications.
+async function updateUnassignedBadge() {
+  try {
+    await buildIssuesScreenData(true);
+  } catch (err) {
+    // Leave the previous badge value in place rather than showing an error state.
+    console.error('[IssuesBadge] update failed:', err);
+  }
+}
 
 // Fetches available transitions for an issue and returns the ID of the one
 // whose target status matches targetStatusName.
@@ -344,12 +527,15 @@ async function handleGetAssignmentStatus(sendResponse) {
   }
 }
 
-// Assigns the current issue to the logged-in user.
-async function handleAssignToMe(sendResponse) {
+// Assigns an issue to the logged-in user. When issueKeyOverride is given (e.g.
+// from the Issues tab's unassigned list), that issue is used directly instead
+// of requiring the active tab to be on that issue's JIRA page; the active tab
+// is only reloaded afterwards if it happens to already be showing that issue.
+async function handleAssignToMe(sendResponse, issueKeyOverride) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
-    const issueKey = extractIssueKey(tab.url);
+    const issueKey = issueKeyOverride || extractIssueKey(tab && tab.url);
     if (!issueKey) {
       sendResponse({ success: false, error: 'Not a JIRA issue page' });
       return;
@@ -407,7 +593,18 @@ async function handleAssignToMe(sendResponse) {
     }
 
     sendResponse({ success: true });
-    chrome.tabs.reload(tab.id);
+    // Only reload the active tab if it's actually showing the issue we just
+    // assigned - avoids reloading an unrelated tab when called from the
+    // Issues tab's unassigned list.
+    if (tab && extractIssueKey(tab.url) === issueKey) {
+      chrome.tabs.reload(tab.id);
+    }
+    // Refresh the Issues tab cache (and toolbar badge) in the background so
+    // the assigned issue drops out of "Unassigned" without waiting for the
+    // next 5-minute alarm.
+    buildIssuesScreenData(true).catch(function (e) {
+      console.error('[AssignToMe] cache refresh failed:', e);
+    });
   } catch (err) {
     sendResponse({ success: false, error: err.message });
   }
@@ -682,6 +879,11 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
     return true;
   }
 
+  if (message.action === 'getIssuesScreenData') {
+    handleGetIssuesScreenData(message.forceRefresh, sendResponse);
+    return true;
+  }
+
   if (message.action === 'logTime') {
     handleLogTime(message, sendResponse);
     return true;
@@ -703,7 +905,7 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
   }
 
   if (message.action === 'assignToMe') {
-    handleAssignToMe(sendResponse);
+    handleAssignToMe(sendResponse, message.issueKey || null);
     return true; // keep channel open for async response
   }
 

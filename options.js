@@ -21,6 +21,7 @@ function main() {
   renderDefaultStartTime();
   renderTimeProfiles();
   renderTimeCommentTemplates();
+  renderJiraIssuesBoard();
 
   // Check for stored preference
   chrome.storage.local.get('customMailtoUrl', function (result) {
@@ -180,6 +181,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('add-time-comment-btn').addEventListener('click', openAddTimeCommentForm);
   document.getElementById('time-comment-save-btn').addEventListener('click', saveTimeCommentForm);
   document.getElementById('time-comment-cancel-btn').addEventListener('click', cancelTimeCommentForm);
+  document.getElementById('save-jira-issues-board-btn').addEventListener('click', saveJiraIssuesBoard);
 });
 
 // ---- INC Resolution template management ----
@@ -538,6 +540,39 @@ function saveDefaultStartTime() {
   if (!val) val = '08:30';
   chrome.storage.local.set({ defaultStartTime: val }, function () {
     var status = document.getElementById('default-start-time-status');
+    status.style.color = 'green';
+    status.textContent = 'Saved.';
+    setTimeout(function () { status.textContent = ''; }, 2000);
+  });
+}
+
+// ---- Jira Issues Board ----
+
+var JIRA_BOARD_DEFAULTS = {
+  jiraRapidViewId: '2801',
+  jiraQuickFilterUnassigned: '14060',
+  jiraQuickFilterAssignedToMe: '14047',
+  jiraQuickFilterAssignedToMeRecent: '14048'
+};
+
+function renderJiraIssuesBoard() {
+  chrome.storage.local.get(Object.keys(JIRA_BOARD_DEFAULTS), function (result) {
+    document.getElementById('jira-rapidview-id').value = result.jiraRapidViewId || JIRA_BOARD_DEFAULTS.jiraRapidViewId;
+    document.getElementById('jira-qf-unassigned').value = result.jiraQuickFilterUnassigned || JIRA_BOARD_DEFAULTS.jiraQuickFilterUnassigned;
+    document.getElementById('jira-qf-assigned-to-me').value = result.jiraQuickFilterAssignedToMe || JIRA_BOARD_DEFAULTS.jiraQuickFilterAssignedToMe;
+    document.getElementById('jira-qf-assigned-to-me-recent').value = result.jiraQuickFilterAssignedToMeRecent || JIRA_BOARD_DEFAULTS.jiraQuickFilterAssignedToMeRecent;
+  });
+}
+
+function saveJiraIssuesBoard() {
+  var payload = {
+    jiraRapidViewId: document.getElementById('jira-rapidview-id').value.trim() || JIRA_BOARD_DEFAULTS.jiraRapidViewId,
+    jiraQuickFilterUnassigned: document.getElementById('jira-qf-unassigned').value.trim() || JIRA_BOARD_DEFAULTS.jiraQuickFilterUnassigned,
+    jiraQuickFilterAssignedToMe: document.getElementById('jira-qf-assigned-to-me').value.trim() || JIRA_BOARD_DEFAULTS.jiraQuickFilterAssignedToMe,
+    jiraQuickFilterAssignedToMeRecent: document.getElementById('jira-qf-assigned-to-me-recent').value.trim() || JIRA_BOARD_DEFAULTS.jiraQuickFilterAssignedToMeRecent
+  };
+  chrome.storage.local.set(payload, function () {
+    var status = document.getElementById('jira-issues-board-status');
     status.style.color = 'green';
     status.textContent = 'Saved.';
     setTimeout(function () { status.textContent = ''; }, 2000);
