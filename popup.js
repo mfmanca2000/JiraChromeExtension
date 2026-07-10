@@ -38,8 +38,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var tabBtnMail = document.getElementById('tab-btn-mail');
   var tabBtnIssues = document.getElementById('tab-btn-issues');
+  var tabBtnOnetime = document.getElementById('tab-btn-onetime');
   var tabMail = document.getElementById('tab-mail');
   var tabIssues = document.getElementById('tab-issues');
+  var tabOnetime = document.getElementById('tab-onetime');
+  var onetimeIframe = document.getElementById('onetime-iframe');
+  var onetimeRefreshBtn = document.getElementById('onetime-refresh-btn');
+  var onetimeLastRefreshed = document.getElementById('onetime-last-refreshed');
   var issuesRefreshBtn = document.getElementById('issues-refresh-btn');
   var issuesGroupBySelect = document.getElementById('issues-group-by');
   var issuesSortBtn = document.getElementById('issues-sort-btn');
@@ -68,14 +73,59 @@ document.addEventListener('DOMContentLoaded', function () {
   function showTab(name) {
     tabMail.style.display = name === 'mail' ? 'block' : 'none';
     tabIssues.style.display = name === 'issues' ? 'block' : 'none';
+    tabOnetime.style.display = name === 'onetime' ? 'block' : 'none';
     tabBtnMail.classList.toggle('active', name === 'mail');
     tabBtnIssues.classList.toggle('active', name === 'issues');
+    tabBtnOnetime.classList.toggle('active', name === 'onetime');
   }
   tabBtnMail.addEventListener('click', function () { showTab('mail'); });
   tabBtnIssues.addEventListener('click', function () {
     showTab('issues');
     if (!issuesRawData) loadIssuesScreen(false);
   });
+  tabBtnOnetime.addEventListener('click', function () { showTab('onetime'); });
+
+  // -- OneTime tab: keeps the SAP session alive via a real iframe navigation
+  // (see comment in popup.html) rather than the fetch-based background ping.
+  // Loads silently in the hidden tab-onetime panel the moment the popup opens
+  // (not only when the user clicks the tab) and auto-reloads every 2 minutes
+  // for as long as this popup instance stays open, so every popup open is
+  // itself a keep-alive ping with no action required from the user. --
+
+  var ONETIME_AUTO_RELOAD_MS = 2 * 60 * 1000;
+  var onetimeAutoReloadTimer = null;
+
+  function buildOnetimeUrl() {
+    // Cache-bust with a query param before the hash so the SPA route is untouched.
+    return 'https://pmpgwd.apps.swisscom.com/fiori?sap-language=FR&_ka=' + Date.now() + '#ZONETIME5-display';
+  }
+
+  function reloadOnetimeIframe() {
+    onetimeIframe.src = buildOnetimeUrl();
+    var d = new Date();
+    onetimeLastRefreshed.textContent = 'Last refreshed: ' +
+      String(d.getHours()).padStart(2, '0') + ':' +
+      String(d.getMinutes()).padStart(2, '0') + ':' +
+      String(d.getSeconds()).padStart(2, '0');
+  }
+
+  function startOnetimeTab() {
+    reloadOnetimeIframe();
+    if (!onetimeAutoReloadTimer) {
+      onetimeAutoReloadTimer = setInterval(reloadOnetimeIframe, ONETIME_AUTO_RELOAD_MS);
+    }
+  }
+
+  onetimeRefreshBtn.addEventListener('click', reloadOnetimeIframe);
+
+  // Kick off on every popup open, independent of which tab is showing - but
+  // deferred until just after the popup's own UI has painted, so this heavy
+  // cross-origin iframe load doesn't compete with (and stall) the initial render.
+  if (window.requestIdleCallback) {
+    requestIdleCallback(startOnetimeTab, { timeout: 1000 });
+  } else {
+    setTimeout(startOnetimeTab, 300);
+  }
 
   function loadIssuesScreen(forceRefresh) {
     issuesRefreshBtn.disabled = true;
