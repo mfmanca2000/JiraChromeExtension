@@ -317,6 +317,33 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Jira Issues Board</div>
+    <p style="font-size:9pt; color:#555; margin:0 0 8px 0;">
+      Configuration for the "Issues" tab in the popup: Rapid View (board) ID and the 3 Quick Filter IDs that define its sections.
+    </p>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <label style="font-size:9pt; color:#333;">Rapid View ID
+        <input type="text" id="jira-rapidview-id" placeholder="2801"
+          style="width:100%; font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px; box-sizing:border-box; margin-top:2px;">
+      </label>
+      <label style="font-size:9pt; color:#333;">Quick Filter ID &mdash; Unassigned
+        <input type="text" id="jira-qf-unassigned" placeholder="14060"
+          style="width:100%; font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px; box-sizing:border-box; margin-top:2px;">
+      </label>
+      <label style="font-size:9pt; color:#333;">Quick Filter ID &mdash; Assigned to Me
+        <input type="text" id="jira-qf-assigned-to-me" placeholder="14047"
+          style="width:100%; font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px; box-sizing:border-box; margin-top:2px;">
+      </label>
+      <label style="font-size:9pt; color:#333;">Quick Filter ID &mdash; Assigned to Me (Recently Updated)
+        <input type="text" id="jira-qf-assigned-to-me-recent" placeholder="14048"
+          style="width:100%; font-size:10pt; padding:4px; border:1px solid #aaa; border-radius:3px; box-sizing:border-box; margin-top:2px;">
+      </label>
+    </div>
+    <button class="btn btn-primary" id="save-jira-issues-board-btn" style="margin-top:8px;">Save</button>
+    <div id="jira-issues-board-status" style="font-size:9pt; margin-top:4px; min-height:14px;"></div>
+  </div>
+
 </body>
 
 </html>

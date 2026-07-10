@@ -4,11 +4,115 @@
   <meta charset="UTF-8">
   <style>
     body {
-      width: 280px;
+      width: 380px;
       font-family: Arial, sans-serif;
       padding: 10px;
       margin: 0;
       min-height: 60px;
+    }
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .tab-btn {
+      flex: 1;
+      font-size: 11px;
+      padding: 5px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: #4285f4;
+      color: #fff;
+      border-color: #4285f4;
+    }
+    .issues-last-refreshed {
+      font-size: 10px;
+      color: #999;
+      text-align: right;
+      margin-bottom: 4px;
+    }
+    .issues-toolbar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .issues-select {
+      font-size: 11px;
+      padding: 3px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      flex: 1;
+    }
+    .issues-section {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 8px 8px 4px;
+      margin-bottom: 10px;
+      background: #fafbfc;
+    }
+    .issues-section-header {
+      font-weight: bold;
+      font-size: 14px;
+      color: #333;
+      margin: 0 0 6px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+    }
+    .issues-count {
+      font-weight: normal;
+      color: #888;
+    }
+    .issue-item a {
+      color: #4285f4;
+      text-decoration: none;
+    }
+    .issue-item a:hover {
+      text-decoration: underline;
+    }
+    .issue-item.issue-overdue {
+      border-left: 3px solid #c62828;
+    }
+    .issue-warning {
+      font-size: 11px;
+      margin-right: 2px;
+    }
+    .issue-item.issue-due-soon {
+      border-left: 3px solid #e65100;
+    }
+    .issue-row-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .issue-assign-btn {
+      flex: none;
+      font-size: 12px;
+      background: transparent;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 24px;
+      height: 24px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .issue-assign-btn:hover {
+      background-color: #e8f0fe;
+      border-color: #4285f4;
+    }
+    .issue-assign-btn:disabled {
+      color: #ccc;
+      border-color: #eee;
+      cursor: default;
     }
     h3 {
       margin: 0 0 8px 0;
@@ -133,6 +237,12 @@
   </style>
 </head>
 <body>
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-mail">This JIRA</button>
+    <button class="tab-btn" id="tab-btn-issues">Issues</button>
+  </div>
+
+  <div id="tab-mail">
   <!-- View 1: email template selection -->
   <div id="view-mail">
     <h3>Select Mail Template</h3>
@@ -241,6 +351,40 @@
   </div>
 
   <div id="set-completed-status" class="status-msg"></div>
+  </div>
+
+  <!-- Issues tab: board quick filters -->
+  <div id="tab-issues" style="display:none">
+    <div id="issues-last-refreshed" class="issues-last-refreshed"></div>
+    <div class="issues-toolbar">
+      <button class="icon-btn" id="issues-refresh-btn" title="Refresh">&#8635;</button>
+      <select id="issues-group-by" class="issues-select" title="Group by">
+        <option value="none">No grouping</option>
+        <option value="project">Group by Project</option>
+      </select>
+      <button class="icon-btn" id="issues-sort-btn" title="Toggle sort order" style="width:auto;padding:0 8px;">&#8595; Date</button>
+    </div>
+    <div id="issues-status" class="status-msg"></div>
+
+    <div class="issues-section">
+      <div class="issues-section-header">Unassigned <span class="issues-count" id="count-unassigned"></span></div>
+      <ul class="template-list issue-list" id="list-unassigned"></ul>
+      <div class="issues-empty status-msg" id="empty-unassigned" style="display:none">No unassigned issues.</div>
+    </div>
+
+    <div class="issues-section">
+      <div class="issues-section-header">Assigned to Me &mdash; due soon <span class="issues-count" id="count-assigned-to-me"></span></div>
+      <ul class="template-list issue-list" id="list-assigned-to-me"></ul>
+      <div class="issues-empty status-msg" id="empty-assigned-to-me" style="display:none">Nothing due within 3 days.</div>
+    </div>
+
+    <div class="issues-section">
+      <div class="issues-section-header">Assigned to Me &mdash; Recently Updated <span class="issues-count" id="count-assigned-to-me-recent"></span></div>
+      <ul class="template-list issue-list" id="list-assigned-to-me-recent"></ul>
+      <div class="issues-empty status-msg" id="empty-assigned-to-me-recent" style="display:none">No recent updates.</div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

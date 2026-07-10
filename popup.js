@@ -35,6 +35,72 @@ document.addEventListener('DOMContentLoaded', function () {
   var teSapCookieInput = document.getElementById('te-sap-cookie');
   var teFetchCookieBtn = document.getElementById('te-fetch-cookie-btn');
 
+  var tabBtnMail = document.getElementById('tab-btn-mail');
+  var tabBtnIssues = document.getElementById('tab-btn-issues');
+  var tabMail = document.getElementById('tab-mail');
+  var tabIssues = document.getElementById('tab-issues');
+  var issuesRefreshBtn = document.getElementById('issues-refresh-btn');
+  var issuesGroupBySelect = document.getElementById('issues-group-by');
+  var issuesSortBtn = document.getElementById('issues-sort-btn');
+  var issuesStatus = document.getElementById('issues-status');
+  var issuesLastRefreshed = document.getElementById('issues-last-refreshed');
+  var listUnassigned = document.getElementById('list-unassigned');
+  var emptyUnassigned = document.getElementById('empty-unassigned');
+  var countUnassigned = document.getElementById('count-unassigned');
+  var listAssignedToMe = document.getElementById('list-assigned-to-me');
+  var emptyAssignedToMe = document.getElementById('empty-assigned-to-me');
+  var countAssignedToMe = document.getElementById('count-assigned-to-me');
+  var listAssignedToMeRecent = document.getElementById('list-assigned-to-me-recent');
+  var emptyAssignedToMeRecent = document.getElementById('empty-assigned-to-me-recent');
+  var countAssignedToMeRecent = document.getElementById('count-assigned-to-me-recent');
+
+  // -- Mail / Issues tabs: popup always opens on the Mail tab; the Issues
+  // tab is lazy-loaded the first time it's opened and cached until refreshed. --
+
+  var issuesRawData = null;
+  var issuesGroupBy = 'none';
+  var issuesSortDir = 'desc';
+
+  function showTab(name) {
+    tabMail.style.display = name === 'mail' ? 'block' : 'none';
+    tabIssues.style.display = name === 'issues' ? 'block' : 'none';
+    tabBtnMail.classList.toggle('active', name === 'mail');
+    tabBtnIssues.classList.toggle('active', name === 'issues');
+  }
+  tabBtnMail.addEventListener('click', function () { showTab('mail'); });
+  tabBtnIssues.addEventListener('click', function () {
+    showTab('issues');
+    if (!issuesRawData) loadIssuesScreen(false);
+  });
+
+  function loadIssuesScreen(forceRefresh) {
+    issuesRefreshBtn.disabled = true;
+    issuesStatus.style.color = '#555';
+    issuesStatus.textContent = 'Loading…';
+    chrome.runtime.sendMessage({ action: 'getIssuesScreenData', forceRefresh: !!forceRefresh }, function (response) {
+      issuesRefreshBtn.disabled = false;
+      if (response && response.success) {
+        issuesRawData = response.data;
+        issuesStatus.textContent = '';
+        renderIssuesScreen();
+        renderLastRefreshed();
+      } else {
+        issuesStatus.style.color = 'red';
+        issuesStatus.textContent = (response && response.error) || 'Failed to load issues.';
+      }
+    });
+  }
+  issuesRefreshBtn.addEventListener('click', function () { loadIssuesScreen(true); });
+  issuesGroupBySelect.addEventListener('change', function () {
+    issuesGroupBy = issuesGroupBySelect.value;
+    renderIssuesScreen();
+  });
+  issuesSortBtn.addEventListener('click', function () {
+    issuesSortDir = issuesSortDir === 'desc' ? 'asc' : 'desc';
+    issuesSortBtn.innerHTML = (issuesSortDir === 'asc' ? '&#8593;' : '&#8595;') + ' Date';
+    renderIssuesScreen();
+  });
+
   // Batch-load all storage keys at once so subsequent click handlers respond
   // without an additional async round-trip to chrome.storage.
   var storageCache = null;
@@ -583,5 +649,135 @@ document.addEventListener('DOMContentLoaded', function () {
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
+  }
+
+  // -- Issues tab rendering --
+
+  function sortIssues(issues, dateField) {
+    return issues.slice().sort(function (a, b) {
+      var ta = a[dateField] ? new Date(a[dateField]).getTime() : 0;
+      var tb = b[dateField] ? new Date(b[dateField]).getTime() : 0;
+      return issuesSortDir === 'asc' ? ta - tb : tb - ta;
+    });
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function renderLastRefreshed() {
+    if (!issuesRawData || !issuesRawData.fetchedAt) {
+      issuesLastRefreshed.textContent = '';
+      return;
+    }
+    var d = new Date(issuesRawData.fetchedAt);
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    var ss = String(d.getSeconds()).padStart(2, '0');
+    issuesLastRefreshed.textContent = 'Last refreshed: ' + hh + ':' + mm + ':' + ss;
+  }
+
+  function buildIssueRow(issue, highlightDates, showUpdated, showAssignToMe) {
+    var li = document.createElement('li');
+    li.className = 'template-item issue-item';
+    var isOverdue = false;
+    if (highlightDates && issue.relevantDate) {
+      var d = new Date(issue.relevantDate);
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (d < today) {
+        isOverdue = true;
+        li.classList.add('issue-overdue');
+      } else {
+        var soon = new Date(today);
+        soon.setDate(soon.getDate() + 3);
+        soon.setHours(23, 59, 59, 999);
+        if (d <= soon) li.classList.add('issue-due-soon');
+      }
+    }
+    var metaParts = [issue.projectKey, issue.status];
+    if (showUpdated && issue.updated) metaParts.push('Updated ' + formatDate(issue.updated));
+    else if (issue.created) metaParts.push('Created ' + formatDate(issue.created));
+    if (highlightDates && issue.relevantDate) metaParts.push('Due ' + formatDate(issue.relevantDate));
+    var meta = metaParts.filter(Boolean).join(' · ');
+
+    var browseUrl = 'https://issue.swisscom.ch/browse/' + issue.key;
+    var warningIcon = isOverdue ? '<span class="issue-warning" title="Overdue">&#9888;&#65039;</span> ' : '';
+    var rowHtml =
+      '<div class="issue-row-main">' +
+        '<div>' +
+          '<div class="template-name">' + warningIcon + '<a href="' + escapeHtml(browseUrl) + '" target="_blank">' +
+            escapeHtml(issue.key) + '</a> — ' + escapeHtml(issue.summary) + '</div>' +
+          '<div class="template-preview">' + escapeHtml(meta) + '</div>' +
+        '</div>';
+    if (showAssignToMe) {
+      rowHtml += '<button class="issue-assign-btn" title="Assign to Me">&#128100;</button>';
+    }
+    rowHtml += '</div>';
+    li.innerHTML = rowHtml;
+
+    if (showAssignToMe) {
+      var assignBtn = li.querySelector('.issue-assign-btn');
+      assignBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        assignBtn.disabled = true;
+        var prevTitle = assignBtn.title;
+        assignBtn.title = 'Working…';
+        chrome.runtime.sendMessage({ action: 'assignToMe', issueKey: issue.key }, function (response) {
+          if (response && response.success) {
+            if (issuesRawData) {
+              issuesRawData.unassigned = issuesRawData.unassigned.filter(function (i) { return i.key !== issue.key; });
+            }
+            renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
+          } else {
+            assignBtn.disabled = false;
+            assignBtn.title = (response && response.error) || prevTitle;
+          }
+        });
+      });
+    }
+    return li;
+  }
+
+  function renderGrouped(listEl, issues, highlightDates, showUpdated, showAssignToMe) {
+    var groups = {};
+    issues.forEach(function (i) {
+      (groups[i.projectKey] = groups[i.projectKey] || []).push(i);
+    });
+    Object.keys(groups).sort().forEach(function (proj) {
+      var h = document.createElement('li');
+      h.className = 'template-item no-template-item';
+      h.innerHTML = '<div class="template-name">' + escapeHtml(proj) + '</div>';
+      listEl.appendChild(h);
+      groups[proj].forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe)); });
+    });
+  }
+
+  function renderSection(listEl, emptyEl, countEl, issues, highlightDates, dateField, showAssignToMe) {
+    var showUpdated = dateField === 'updated';
+    var sorted = sortIssues(issues, dateField);
+    countEl.textContent = '(' + sorted.length + ')';
+    listEl.innerHTML = '';
+    if (sorted.length === 0) {
+      emptyEl.style.display = 'block';
+      listEl.style.display = 'none';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    listEl.style.display = 'block';
+    if (issuesGroupBy === 'project') {
+      renderGrouped(listEl, sorted, highlightDates, showUpdated, showAssignToMe);
+    } else {
+      sorted.forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe)); });
+    }
+  }
+
+  function renderIssuesScreen() {
+    if (!issuesRawData) return;
+    renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
+    renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe, true, 'created');
+    renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent, false, 'updated');
   }
 });
