@@ -321,9 +321,10 @@ async function buildIssuesScreenData(forceRefresh) {
   const unassigned = unassignedIssues.map(enrichIssue);
   const assignedToMeAll = assignedIssuesAll.map(enrichIssue);
   const assignedToMe = assignedToMeAll.filter(i => i.relevantDate && new Date(i.relevantDate) <= windowEnd);
+  const assignedToMeInProgress = assignedToMeAll.filter(i => i.status === 'In Progress');
   const assignedToMeRecent = recentIssues.map(enrichIssue);
 
-  const data = { unassigned, assignedToMe, assignedToMeRecent, fetchedAt: Date.now() };
+  const data = { unassigned, assignedToMe, assignedToMeInProgress, assignedToMeRecent, fetchedAt: Date.now() };
   await chrome.storage.session.set({ [ISSUES_SCREEN_CACHE_KEY]: { data, ts: Date.now() } });
   updateBadgeFromCount(unassigned.length);
   return data;

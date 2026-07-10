@@ -48,6 +48,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var listUnassigned = document.getElementById('list-unassigned');
   var emptyUnassigned = document.getElementById('empty-unassigned');
   var countUnassigned = document.getElementById('count-unassigned');
+  var listAssignedToMeInProgress = document.getElementById('list-assigned-to-me-in-progress');
+  var emptyAssignedToMeInProgress = document.getElementById('empty-assigned-to-me-in-progress');
+  var countAssignedToMeInProgress = document.getElementById('count-assigned-to-me-in-progress');
   var listAssignedToMe = document.getElementById('list-assigned-to-me');
   var emptyAssignedToMe = document.getElementById('empty-assigned-to-me');
   var countAssignedToMe = document.getElementById('count-assigned-to-me');
@@ -762,8 +765,15 @@ document.addEventListener('DOMContentLoaded', function () {
           if (response && response.success) {
             if (issuesRawData) {
               issuesRawData.unassigned = issuesRawData.unassigned.filter(function (i) { return i.key !== issue.key; });
+              // Assigning also transitions the ticket to "In Progress" server-side
+              // (see background.js handleAssignToMe) - reflect that immediately
+              // rather than waiting for the next refresh.
+              issue.status = 'In Progress';
+              issuesRawData.assignedToMeInProgress = (issuesRawData.assignedToMeInProgress || []).filter(function (i) { return i.key !== issue.key; });
+              issuesRawData.assignedToMeInProgress.unshift(issue);
             }
             renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
+            renderAssignedToMeInProgress();
           } else {
             assignBtn.disabled = false;
             assignBtn.title = (response && response.error) || prevTitle;
@@ -807,9 +817,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function renderAssignedToMeInProgress() {
+    renderSection(listAssignedToMeInProgress, emptyAssignedToMeInProgress, countAssignedToMeInProgress,
+      (issuesRawData && issuesRawData.assignedToMeInProgress) || [], false, 'created', false);
+  }
+
   function renderIssuesScreen() {
     if (!issuesRawData) return;
     renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
+    renderAssignedToMeInProgress();
     renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe, true, 'created');
     renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent, false, 'updated');
   }
