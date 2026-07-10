@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var backLabelBtn = document.getElementById('back-label-btn');
   var copyIdBtn = document.getElementById('copy-id-btn');
   var assignToMeBtn = document.getElementById('assign-to-me-btn');
+  var jiraTabWarning = document.getElementById('jira-tab-warning');
   var viewCopyId = document.getElementById('view-copy-id');
   var copyIdCommentList = document.getElementById('copy-id-comment-list');
   var noCopyIdCommentItem = document.getElementById('no-copy-id-comment');
@@ -114,23 +115,49 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   );
 
-  // -- Assign to Me: pre-check assignment status so the button can be
-  // disabled when the ticket is already assigned to the current user --
+  // -- JIRA tab gating: the "This JIRA" tab's actions only make sense while
+  // the active browser tab is actually on a JIRA issue page, so everything
+  // is disabled up front (rather than only failing after a click) when it's not. --
+
+  var JIRA_ORIGIN = 'https://issue.swisscom.ch';
+  var isOnJiraTab = false;
+
+  function setJiraActionsEnabled(enabled) {
+    isOnJiraTab = enabled;
+    setCompletedBtn.disabled = !enabled;
+    addLabelBtn.disabled = !enabled;
+    copyIdBtn.disabled = !enabled;
+    templateList.classList.toggle('disabled', !enabled);
+    jiraTabWarning.style.display = enabled ? 'none' : 'block';
+    if (!enabled) {
+      assignToMeBtn.disabled = true;
+      assignToMeBtn.title = 'Not on a JIRA issue page';
+    }
+  }
 
   assignToMeBtn.disabled = true;
-  chrome.runtime.sendMessage({ action: 'getAssignmentStatus' }, function (response) {
-    if (response && response.success) {
-      if (response.isAssignedToMe) {
-        assignToMeBtn.disabled = true;
-        assignToMeBtn.title = 'Already assigned to you';
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    var tab = tabs && tabs[0];
+    var onJira = !!(tab && tab.url && tab.url.indexOf(JIRA_ORIGIN) === 0);
+    setJiraActionsEnabled(onJira);
+    if (!onJira) return;
+
+    // Pre-check assignment status so the button can be disabled when the
+    // ticket is already assigned to the current user.
+    chrome.runtime.sendMessage({ action: 'getAssignmentStatus' }, function (response) {
+      if (response && response.success) {
+        if (response.isAssignedToMe) {
+          assignToMeBtn.disabled = true;
+          assignToMeBtn.title = 'Already assigned to you';
+        } else {
+          assignToMeBtn.disabled = false;
+          assignToMeBtn.title = 'Assign to Me';
+        }
       } else {
-        assignToMeBtn.disabled = false;
-        assignToMeBtn.title = 'Assign to Me';
+        assignToMeBtn.disabled = true;
+        assignToMeBtn.title = (response && response.error) ? response.error : 'Not available';
       }
-    } else {
-      assignToMeBtn.disabled = true;
-      assignToMeBtn.title = (response && response.error) ? response.error : 'Not available';
-    }
+    });
   });
 
   assignToMeBtn.addEventListener('click', function () {

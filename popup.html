@@ -105,7 +105,7 @@
       cursor: pointer;
       padding: 0;
     }
-    .issue-assign-btn:hover {
+    .issue-assign-btn:hover:not(:disabled) {
       background-color: #e8f0fe;
       border-color: #4285f4;
     }
@@ -113,6 +113,7 @@
       color: #ccc;
       border-color: #eee;
       cursor: default;
+      opacity: 0.4;
     }
     h3 {
       margin: 0 0 8px 0;
@@ -151,6 +152,19 @@
     }
     .no-template-item {
       background-color: #f9f9f9;
+    }
+    .template-list.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .jira-tab-warning {
+      font-size: 11px;
+      color: #c62828;
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+      padding: 5px 7px;
+      margin-bottom: 8px;
     }
     .footer {
       display: flex;
@@ -202,7 +216,7 @@
       cursor: pointer;
       padding: 0;
     }
-    .icon-btn:hover {
+    .icon-btn:hover:not(:disabled) {
       background-color: #f1f1f1;
       border-color: #999;
     }
@@ -210,6 +224,7 @@
       color: #ccc;
       border-color: #eee;
       cursor: default;
+      opacity: 0.4;
     }
     .icon-row {
       display: flex;
@@ -243,6 +258,7 @@
   </div>
 
   <div id="tab-mail">
+  <div id="jira-tab-warning" class="jira-tab-warning" style="display:none">Not on a JIRA issue page &mdash; actions disabled.</div>
   <!-- View 1: email template selection -->
   <div id="view-mail">
     <h3>Select Mail Template</h3>
