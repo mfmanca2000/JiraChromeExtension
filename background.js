@@ -858,19 +858,41 @@ async function handleLogTime(payload, sendResponse) {
   }
 }
 
+// Fetches the SAP session cookie for the current browser first (covers the case where
+// the user is already Kerberos-authenticated on the SAP page in this same Chrome profile),
+// falling back to the Edge bridge/bookmarklet relay only if Chrome doesn't have it.
+async function handleGetSapCookie(sendResponse) {
+  try {
+    const cookie = await chrome.cookies.get({
+      url: 'https://pmpgwd.apps.swisscom.com',
+      name: 'SAP_SESSIONID_P3L_100'
+    });
+    if (cookie && cookie.value) {
+      console.log('[SAP] cookie found directly in Chrome, length:', cookie.value.length);
+      sendResponse({ success: true, sessionId: cookie.value, source: 'chrome' });
+      return;
+    }
+  } catch (e) {
+    console.error('[SAP] chrome.cookies.get failed:', e);
+  }
+
+  try {
+    const res = await fetch('http://127.0.0.1:27182/get');
+    const data = await res.json();
+    if (data.sessionId) {
+      sendResponse({ success: true, sessionId: data.sessionId, source: 'bridge' });
+    } else {
+      sendResponse({ success: false, error: data.error || 'No cookie stored' });
+    }
+  } catch (e) {
+    sendResponse({ success: false, error: 'Bridge not running. Start bridge/start.bat first.' });
+  }
+}
+
 // Handles the sendMail message sent from popup.js when the user picks a template.
 chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
   if (message.action === 'getEdgeSapCookie') {
-    fetch('http://127.0.0.1:27182/get')
-      .then(r => r.json())
-      .then(data => {
-        if (data.sessionId) {
-          sendResponse({ success: true, sessionId: data.sessionId });
-        } else {
-          sendResponse({ success: false, error: data.error || 'No cookie stored' });
-        }
-      })
-      .catch(() => sendResponse({ success: false, error: 'Bridge not running. Start bridge/start.bat first.' }));
+    handleGetSapCookie(sendResponse);
     return true;
   }
 

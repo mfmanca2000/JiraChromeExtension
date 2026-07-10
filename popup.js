@@ -378,11 +378,13 @@ document.addEventListener('DOMContentLoaded', function () {
       if (response && response.success) {
         teSapCookieInput.value = response.sessionId;
         teStatusDiv.style.color = 'green';
-        teStatusDiv.textContent = 'Session ID fetched from Edge!';
+        teStatusDiv.textContent = response.source === 'chrome'
+          ? 'Session ID fetched from Chrome!'
+          : 'Session ID fetched from Edge!';
         setTimeout(function() { teStatusDiv.textContent = ''; }, 2000);
       } else {
         teStatusDiv.style.color = 'red';
-        teStatusDiv.textContent = (response && response.error) || 'Could not fetch from Edge';
+        teStatusDiv.textContent = (response && response.error) || 'Could not fetch cookie';
       }
     });
   });
@@ -443,12 +445,16 @@ document.addEventListener('DOMContentLoaded', function () {
       var empNum = result.employeeNumber || '';
       teSapCookieInput.value = result.sapCookies || '';
 
-      // Auto-fetch a fresh cookie from the bridge on every open.
+      // Auto-fetch a fresh cookie on every open: try Chrome's own cookie jar first
+      // (in case the user is already logged into SAP in this browser), then fall
+      // back to the Edge bridge/bookmarklet relay.
       chrome.runtime.sendMessage({ action: 'getEdgeSapCookie' }, function(response) {
         if (response && response.success) {
           teSapCookieInput.value = response.sessionId;
           teStatusDiv.style.color = 'green';
-          teStatusDiv.textContent = 'Session ID auto-fetched from Edge';
+          teStatusDiv.textContent = response.source === 'chrome'
+            ? 'Session ID auto-fetched from Chrome'
+            : 'Session ID auto-fetched from Edge';
           setTimeout(function() { teStatusDiv.textContent = ''; }, 2000);
         } else {
           teStatusDiv.style.color = '#e65100';
