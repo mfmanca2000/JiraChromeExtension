@@ -703,6 +703,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // Created/updated come from Jira as full timestamps, so unlike formatDate
+  // (used for the date-only Due date) this also appends the time.
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return formatDate(iso) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
   function renderLastRefreshed() {
     if (!issuesRawData || !issuesRawData.fetchedAt) {
       issuesLastRefreshed.textContent = '';
@@ -734,8 +742,8 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
     var metaParts = [issue.projectKey, issue.status];
-    if (showUpdated && issue.updated) metaParts.push('Updated ' + formatDate(issue.updated));
-    else if (issue.created) metaParts.push('Created ' + formatDate(issue.created));
+    if (showUpdated && issue.updated) metaParts.push('Updated ' + formatDateTime(issue.updated));
+    else if (issue.created) metaParts.push('Created ' + formatDateTime(issue.created));
     if (highlightDates && issue.relevantDate) metaParts.push('Due ' + formatDate(issue.relevantDate));
     var meta = metaParts.filter(Boolean).join(' · ');
 

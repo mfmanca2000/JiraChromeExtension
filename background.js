@@ -6,13 +6,17 @@
 // The alarm fires every ~24 seconds, below Chrome's 30-second idle threshold.
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
 
-// Periodically re-counts unassigned issues on the configured board and badges
-// the toolbar icon with the count (see updateUnassignedBadge below).
-const ISSUES_BADGE_ALARM = 'jiraIssuesBadgeCheck';
-chrome.alarms.create(ISSUES_BADGE_ALARM, { periodInMinutes: 5 });
+// Periodically re-counts unassigned issues on the configured board (badging the
+// toolbar icon with the count, see updateUnassignedBadge below) and pings SAP to
+// keep its session from idling out (see keepSapSessionAlive below).
+const PERIODIC_REFRESH_ALARM = 'periodicRefresh';
+chrome.alarms.create(PERIODIC_REFRESH_ALARM, { periodInMinutes: 5 });
 
 chrome.alarms.onAlarm.addListener(function(alarm) {
-  if (alarm.name === ISSUES_BADGE_ALARM) updateUnassignedBadge();
+  if (alarm.name === PERIODIC_REFRESH_ALARM) {
+    updateUnassignedBadge();
+    keepSapSessionAlive();
+  }
 });
 
 chrome.runtime.onInstalled.addListener(function() { updateUnassignedBadge(); });
@@ -646,6 +650,76 @@ async function handleGetIssueInfo(sendResponse) {
 }
 
 
+// -- Shared SAP session helpers (used by handleLogTime and keepSapSessionAlive) --
+
+const SAP_BASE = 'https://pmpgwd.apps.swisscom.com';
+const SAP_CSRF_URL = `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/?sap-client=100`;
+const SAP_HEADERS = {
+  'DataServiceVersion': '2.0',
+  'MaxDataServiceVersion': '2.0',
+  'X-Requested-With': 'XMLHttpRequest',
+  'X-XHR-Logon': 'accept="iframe,strict-window,window"',
+  'sap-contextid-accept': 'header'
+};
+
+const sapPad = n => String(n).padStart(2, '0');
+
+// Builds the full Cookie header: prefixes the session cookie + adds companion
+// cookies to avoid a Negotiate re-challenge.
+function buildSapCookieHeader(sessionId) {
+  const now = new Date();
+  const dt = `${now.getFullYear()}-${sapPad(now.getMonth()+1)}-${sapPad(now.getDate())} ${sapPad(now.getHours())}:${sapPad(now.getMinutes())}:${sapPad(now.getSeconds())}`;
+  const negoTs = dt.replace(/ /g, '%20').replace(/:/g, '%3a');
+  return `SAP_SESSIONID_P3L_100=${sessionId}; SPNegoTokenRequested=${negoTs}; sap-usercontext=sap-client=100`;
+}
+
+async function installSapCookieRule(ruleId, cookieStr) {
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [ruleId],
+    addRules: [{
+      id: ruleId,
+      priority: 1,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [{ header: 'Cookie', operation: 'set', value: cookieStr }]
+      },
+      condition: { urlFilter: '||pmpgwd.apps.swisscom.com' }
+    }]
+  });
+}
+
+function removeSapCookieRule(ruleId) {
+  return chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [ruleId] });
+}
+
+// Pings the SAP CSRF endpoint using the last-known session cookie so the
+// server-side session doesn't idle out between actual time-log submissions.
+// No-ops when there's no stored session yet; failures (including an already-
+// expired session) are logged only - handleLogTime will surface a real error
+// the next time the user actually logs time.
+const SAP_KEEPALIVE_DNR_RULE_ID = 43;
+async function keepSapSessionAlive() {
+  try {
+    const stored = await chrome.storage.local.get('sapCookies');
+    const sessionId = (stored.sapCookies || '').trim();
+    if (!sessionId) return;
+
+    const cookieStr = buildSapCookieHeader(sessionId);
+    await installSapCookieRule(SAP_KEEPALIVE_DNR_RULE_ID, cookieStr);
+    try {
+      const res = await fetch(SAP_CSRF_URL, {
+        credentials: 'omit',
+        headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS }
+      });
+      console.log('[SAP] keep-alive ping status:', res.status);
+    } finally {
+      await removeSapCookieRule(SAP_KEEPALIVE_DNR_RULE_ID);
+    }
+  } catch (e) {
+    console.error('[SAP] keep-alive failed:', e);
+  }
+}
+
 // Builds and POSTs a time entry to the SAP time tracker.
 // Automatically retries with a 15-minute shift when SAP reports a slot conflict,
 // skipping over the mandatory 12:00–13:00 lunch break if the shift lands there.
@@ -685,7 +759,7 @@ async function handleLogTime(payload, sendResponse) {
       : (payload.comment ? prefix + ': ' + payload.comment : prefix);
 
     // SAP quirk: embed local h:m directly as UTC milliseconds for Start/EndDate.
-    const pad = n => String(n).padStart(2, '0');
+    const pad = sapPad;
     function sapDate(y, mo, d, h, m) {
       return '/Date(' + Date.UTC(y, mo - 1, d, h, m, 0) + ')/';
     }
@@ -695,47 +769,23 @@ async function handleLogTime(payload, sendResponse) {
     // start_date: real UTC timestamp of local midnight (used as day anchor).
     const startOfDayMs = new Date(year, month - 1, day, 0, 0, 0).getTime();
 
-    // Build full Cookie header: prefix with cookie name + add companion cookies to avoid Negotiate re-challenge.
-    const now = new Date();
-    const dt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    const negoTs = dt.replace(/ /g, '%20').replace(/:/g, '%3a');
-    const fullCookieStr = `SAP_SESSIONID_P3L_100=${sessionId}; SPNegoTokenRequested=${negoTs}; sap-usercontext=sap-client=100`;
+    const fullCookieStr = buildSapCookieHeader(sessionId);
 
     console.log('[SAP] session ID length:', sessionId.length, '| preview:', sessionId.substring(0, 30) + '…');
 
     const DNR_RULE_ID = 42;
     try {
-      await chrome.declarativeNetRequest.updateSessionRules({
-        removeRuleIds: [DNR_RULE_ID],
-        addRules: [{
-          id: DNR_RULE_ID,
-          priority: 1,
-          action: {
-            type: 'modifyHeaders',
-            requestHeaders: [{ header: 'Cookie', operation: 'set', value: fullCookieStr }]
-          },
-          condition: { urlFilter: '||pmpgwd.apps.swisscom.com' }
-        }]
-      });
+      await installSapCookieRule(DNR_RULE_ID, fullCookieStr);
       console.log('[SAP] DNR rule installed');
     } catch (e) {
       console.error('[SAP] DNR rule setup failed:', e);
     }
 
-    const SAP_HEADERS = {
-      'DataServiceVersion': '2.0',
-      'MaxDataServiceVersion': '2.0',
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-XHR-Logon': 'accept="iframe,strict-window,window"',
-      'sap-contextid-accept': 'header'
-    };
-
     try {
       let csrfToken = '';
       try {
         console.log('[SAP] fetching CSRF token…');
-        const csrfRes = await fetch(
-          'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/?sap-client=100',
+        const csrfRes = await fetch(SAP_CSRF_URL,
           { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } }
         );
         console.log('[SAP] CSRF status:', csrfRes.status);
@@ -793,7 +843,7 @@ async function handleLogTime(payload, sendResponse) {
 
         console.log(`[SAP] attempt ${attempt + 1}: posting ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
         const res = await fetch(
-          'https://pmpgwd.apps.swisscom.com/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100',
+          `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100`,
           { method: 'POST', credentials: 'omit', headers: postHeaders, body: JSON.stringify(sapPayload) }
         );
         console.log('[SAP] POST status:', res.status);
@@ -851,7 +901,7 @@ async function handleLogTime(payload, sendResponse) {
         console.log(`[SAP] conflict - retrying at ${pad(startH)}:${pad(startM)}–${pad(endH)}:${pad(endM)}`);
       }
     } finally {
-      chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [DNR_RULE_ID] });
+      removeSapCookieRule(DNR_RULE_ID);
       console.log('[SAP] DNR rule removed');
     }
   } catch (err) {
