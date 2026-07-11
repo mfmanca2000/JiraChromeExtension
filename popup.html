@@ -251,7 +251,29 @@
     .te-prefix { font-size: 10px; color: #333; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 3px; padding: 3px 6px; margin-bottom: 6px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .onetime-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .onetime-last-refreshed { font-size: 10px; color: #999; }
-    .onetime-frame { width: 100%; height: 460px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    /* The iframe is rendered at a real desktop viewport size (so SAP Fiori
+       keeps its full desktop layout instead of collapsing into its cramped
+       mobile view) and then visually scaled down with a CSS transform to
+       fit the popup's ~360px width. */
+    .onetime-frame-wrap {
+      width: 100%;
+      height: 253px;
+      overflow: hidden;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .onetime-frame {
+      width: 1280px;
+      height: 900px;
+      border: none;
+      transform: scale(0.28125);
+      transform-origin: 0 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
   </style>
 </head>
 <body>
@@ -421,7 +443,9 @@
       <span id="onetime-last-refreshed" class="onetime-last-refreshed"></span>
       <button class="icon-btn" id="onetime-refresh-btn" title="Refresh now">&#8635;</button>
     </div>
-    <iframe id="onetime-iframe" class="onetime-frame"></iframe>
+    <div class="onetime-frame-wrap">
+      <iframe id="onetime-iframe" class="onetime-frame"></iframe>
+    </div>
   </div>
 
   <script src="popup.js"></script>
