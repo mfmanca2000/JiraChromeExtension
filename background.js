@@ -930,8 +930,33 @@ function parseSapDuration(str) {
   return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 0, m: 0 };
 }
 
+// Monday of the week containing `d`, as a date-only Date in local time.
+function mondayOf(d) {
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = date.getDay(); // 0=Sun..6=Sat
+  date.setDate(date.getDate() - ((dow + 6) % 7));
+  return date;
+}
+
+// This service doesn't support arbitrary $filter (a generic date-range/text
+// $filter is silently ignored - confirmed by testing: it returns a small
+// fixed recent window regardless of what's asked for, unfiltered by text).
+// The real Fiori app instead pages week-by-week: $filter=StartDate eq
+// datetime'<mondayOfThatWeek>T12:00:00' and EmployeeNumber eq '<emp>' and
+// Mode eq 'WEEK' returns that whole week's entries. Captured directly from
+// the app's own Network tab while clicking its "previous week" arrow.
+async function fetchTimeEntryWeek(employeeNumber, monday) {
+  const anchorLiteral = `${monday.getFullYear()}-${sapPad(monday.getMonth() + 1)}-${sapPad(monday.getDate())}T12:00:00`;
+  const filter = `StartDate eq datetime'${anchorLiteral}' and EmployeeNumber eq '${employeeNumber}' and Mode eq 'WEEK'`;
+  const url = `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100&$format=json&$filter=${encodeURIComponent(filter)}`;
+  const res = await fetch(url, { credentials: 'omit', headers: { 'Accept': 'application/json', ...SAP_HEADERS } });
+  return res;
+}
+
 // Lists SAP time entries whose comment starts with one of TBM_PLACEHOLDERS,
 // for the configured employee number, within the last TBM_LOOKBACK_DAYS days.
+// Walks backward week-by-week (see fetchTimeEntryWeek) since this service
+// only supports fetching one week of entries at a time.
 async function handleFetchToBeModified(payload, sendResponse) {
   try {
     const stored = await chrome.storage.local.get(['employeeNumber', 'sapCookies']);
@@ -948,22 +973,15 @@ async function handleFetchToBeModified(payload, sendResponse) {
     }
     await new Promise(resolve => chrome.storage.local.set({ sapCookies: sessionId }, resolve));
 
-    const since = new Date();
-    since.setDate(since.getDate() - TBM_LOOKBACK_DAYS);
-    const sinceLiteral = since.toISOString().slice(0, 19);
-
-    const placeholderFilter = TBM_PLACEHOLDERS
-      .map(p => `startswith(text,'${p}') eq true`)
-      .join(' or ');
-    const filter = `EmployeeNumber eq '${employeeNumber}' and StartDate ge datetime'${sinceLiteral}' and (${placeholderFilter})`;
-    const url = `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100&$format=json&$filter=${encodeURIComponent(filter)}`;
+    const today = new Date();
+    const cutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate() - TBM_LOOKBACK_DAYS);
+    const cutoffStr = `${cutoff.getFullYear()}-${sapPad(cutoff.getMonth() + 1)}-${sapPad(cutoff.getDate())}`;
 
     await installSapCookieRule(TBM_LIST_DNR_RULE_ID, buildSapCookieHeader(sessionId));
     try {
       // This Gateway service is stateful (sap-contextid-accept: header) - every other
       // working call in this file (handleLogTime, keepSapSessionAlive) hits the CSRF
       // endpoint first to establish the session context before the real request.
-      // Skipping this on the list GET is what produced the 403 seen in testing.
       try {
         const csrfRes = await fetch(SAP_CSRF_URL, { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } });
         console.log('[SAP] list CSRF handshake status:', csrfRes.status);
@@ -971,19 +989,38 @@ async function handleFetchToBeModified(payload, sendResponse) {
         console.error('[SAP] list CSRF handshake failed:', e);
       }
 
-      const res = await fetch(url, { credentials: 'omit', headers: { 'Accept': 'application/json', ...SAP_HEADERS } });
-      if (res.status === 401) {
-        sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
-        return;
+      const results = [];
+      const seenKeys = new Set();
+      const thisMonday = mondayOf(today);
+      const MAX_WEEKS = 8; // safety cap; TBM_LOOKBACK_DAYS=30 needs ~5
+      for (let w = 0; w < MAX_WEEKS; w++) {
+        const monday = new Date(thisMonday);
+        monday.setDate(monday.getDate() - w * 7);
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate() + 6);
+        if (sunday < cutoff) break; // this whole week is entirely before the lookback window
+
+        const res = await fetchTimeEntryWeek(employeeNumber, monday);
+        if (res.status === 401) {
+          sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
+          return;
+        }
+        if (!res.ok) {
+          sendResponse({ success: false, error: `HTTP ${res.status} while listing TO_BE_MODIFIED entries (week of ${monday.toDateString()}).` });
+          return;
+        }
+        const body = await res.json();
+        const weekResults = (body && body.d && body.d.results) || [];
+        for (const r of weekResults) {
+          const key = r.__metadata && r.__metadata.uri;
+          if (key && !seenKeys.has(key)) {
+            seenKeys.add(key);
+            results.push(r);
+          }
+        }
       }
-      if (!res.ok) {
-        sendResponse({ success: false, error: `HTTP ${res.status} while listing TO_BE_MODIFIED entries.` });
-        return;
-      }
-      const body = await res.json();
-      const results = (body && body.d && body.d.results) || [];
+
       const entries = results
-        // Client-side safety net in case the server-side $filter isn't honored as expected.
         .filter(r => TBM_PLACEHOLDERS.some(p => (r.text || '').indexOf(p) === 0))
         .map(r => {
           const date = parseSapMsDate(r.StartDate);
@@ -997,7 +1034,8 @@ async function handleFetchToBeModified(payload, sendResponse) {
             text: r.text || ''
           };
         })
-        .filter(e => e.key);
+        .filter(e => e.key && e.date >= cutoffStr)
+        .sort((a, b) => (a.date + a.startTime < b.date + b.startTime ? 1 : -1));
       sendResponse({ success: true, entries });
     } finally {
       await removeSapCookieRule(TBM_LIST_DNR_RULE_ID);
