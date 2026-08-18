@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var issuesSortDir = 'desc';
   var tbmRawEntries = null;
   var tbmSelectedEntry = null;
+  var tbmLastRefreshedLabel = '';
 
   function showTab(name) {
     tabMail.style.display = name === 'mail' ? 'block' : 'none';
@@ -113,7 +114,20 @@ document.addEventListener('DOMContentLoaded', function () {
     showTab('tbm');
     viewTbmEdit.style.display = 'none';
     viewTbmList.style.display = 'block';
-    if (!tbmRawEntries) loadTbmList();
+    if (tbmRawEntries) return; // already loaded this popup session
+
+    // Persisted across popup opens/closes so only the Refresh button triggers
+    // a real SAP fetch - opening the tab just shows what was last fetched.
+    chrome.storage.local.get('tbmCache', function (result) {
+      if (result.tbmCache && result.tbmCache.entries) {
+        tbmRawEntries = result.tbmCache.entries;
+        tbmLastRefreshedLabel = result.tbmCache.lastRefreshed || '';
+        tbmLastRefreshed.textContent = tbmLastRefreshedLabel;
+        renderTbmList();
+      } else {
+        loadTbmList();
+      }
+    });
   });
 
   // -- OneTime tab: keeps the SAP session alive via a real iframe navigation
@@ -214,10 +228,12 @@ document.addEventListener('DOMContentLoaded', function () {
             tbmStatus.textContent = '';
             renderTbmList();
             var d = new Date();
-            tbmLastRefreshed.textContent = 'Last refreshed: ' +
+            tbmLastRefreshedLabel = 'Last refreshed: ' +
               String(d.getHours()).padStart(2, '0') + ':' +
               String(d.getMinutes()).padStart(2, '0') + ':' +
               String(d.getSeconds()).padStart(2, '0');
+            tbmLastRefreshed.textContent = tbmLastRefreshedLabel;
+            persistTbmCache();
           } else {
             tbmRawEntries = null;
             tbmStatus.style.color = 'red';
@@ -228,6 +244,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
   tbmRefreshBtn.addEventListener('click', loadTbmList);
+
+  function persistTbmCache() {
+    chrome.storage.local.set({ tbmCache: { entries: tbmRawEntries || [], lastRefreshed: tbmLastRefreshedLabel } });
+  }
 
   function renderTbmList() {
     tbmList.innerHTML = '';
@@ -345,6 +365,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tbmConfirm.style.display = 'none';
             tbmResolveBtn.style.display = '';
             renderTbmList();
+            persistTbmCache();
             viewTbmEdit.style.display = 'none';
             viewTbmList.style.display = 'block';
           } else {
