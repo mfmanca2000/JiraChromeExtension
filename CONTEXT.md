@@ -5,7 +5,7 @@ Chrome extension that composes emails, tracks Jira issues, and logs time entries
 ## Language
 
 **TO_BE_MODIFIED entry**:
-A SAP time entry posted with the literal string `TO_BE_MODIFIED` at the start of its comment/text field, used as a placeholder when the PSP element and Issue reference aren't known yet at logging time. Resolved later by editing the entry once both are known.
+A SAP time entry posted with a placeholder string at the start of its comment/text field — either `TO_BE_MODIFIED` or `TO BE MODIFIED` (both spellings occur and are treated as equivalent) — used when the PSP element and Issue reference aren't known yet at logging time. Resolved later by editing the entry once both are known.
 _Avoid_: placeholder entry, draft entry
 
 **Issue reference**:

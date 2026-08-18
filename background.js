@@ -914,7 +914,9 @@ async function handleLogTime(payload, sendResponse) {
 // element and Issue reference weren't known yet at logging time. --
 
 const TBM_LOOKBACK_DAYS = 30;
-const TBM_PLACEHOLDER = 'TO_BE_MODIFIED';
+// Accepted spellings of the placeholder prefix - some entries use the underscored
+// form, others were typed with plain spaces. Both mean the same thing.
+const TBM_PLACEHOLDERS = ['TO_BE_MODIFIED', 'TO BE MODIFIED'];
 const TBM_LIST_DNR_RULE_ID = 44;
 const TBM_RESOLVE_DNR_RULE_ID = 45;
 
@@ -928,8 +930,8 @@ function parseSapDuration(str) {
   return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 0, m: 0 };
 }
 
-// Lists SAP time entries whose comment starts with TO_BE_MODIFIED, for the
-// configured employee number, within the last TBM_LOOKBACK_DAYS days.
+// Lists SAP time entries whose comment starts with one of TBM_PLACEHOLDERS,
+// for the configured employee number, within the last TBM_LOOKBACK_DAYS days.
 async function handleFetchToBeModified(payload, sendResponse) {
   try {
     const stored = await chrome.storage.local.get(['employeeNumber', 'sapCookies']);
@@ -950,7 +952,10 @@ async function handleFetchToBeModified(payload, sendResponse) {
     since.setDate(since.getDate() - TBM_LOOKBACK_DAYS);
     const sinceLiteral = since.toISOString().slice(0, 19);
 
-    const filter = `EmployeeNumber eq '${employeeNumber}' and StartDate ge datetime'${sinceLiteral}' and startswith(text,'${TBM_PLACEHOLDER}') eq true`;
+    const placeholderFilter = TBM_PLACEHOLDERS
+      .map(p => `startswith(text,'${p}') eq true`)
+      .join(' or ');
+    const filter = `EmployeeNumber eq '${employeeNumber}' and StartDate ge datetime'${sinceLiteral}' and (${placeholderFilter})`;
     const url = `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100&$format=json&$filter=${encodeURIComponent(filter)}`;
 
     await installSapCookieRule(TBM_LIST_DNR_RULE_ID, buildSapCookieHeader(sessionId));
@@ -979,7 +984,7 @@ async function handleFetchToBeModified(payload, sendResponse) {
       const results = (body && body.d && body.d.results) || [];
       const entries = results
         // Client-side safety net in case the server-side $filter isn't honored as expected.
-        .filter(r => (r.text || '').indexOf(TBM_PLACEHOLDER) === 0)
+        .filter(r => TBM_PLACEHOLDERS.some(p => (r.text || '').indexOf(p) === 0))
         .map(r => {
           const date = parseSapMsDate(r.StartDate);
           const start = parseSapDuration(r.StartTime);
