@@ -955,6 +955,17 @@ async function handleFetchToBeModified(payload, sendResponse) {
 
     await installSapCookieRule(TBM_LIST_DNR_RULE_ID, buildSapCookieHeader(sessionId));
     try {
+      // This Gateway service is stateful (sap-contextid-accept: header) - every other
+      // working call in this file (handleLogTime, keepSapSessionAlive) hits the CSRF
+      // endpoint first to establish the session context before the real request.
+      // Skipping this on the list GET is what produced the 403 seen in testing.
+      try {
+        const csrfRes = await fetch(SAP_CSRF_URL, { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } });
+        console.log('[SAP] list CSRF handshake status:', csrfRes.status);
+      } catch (e) {
+        console.error('[SAP] list CSRF handshake failed:', e);
+      }
+
       const res = await fetch(url, { credentials: 'omit', headers: { 'Accept': 'application/json', ...SAP_HEADERS } });
       if (res.status === 401) {
         sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
