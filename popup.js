@@ -39,9 +39,11 @@ document.addEventListener('DOMContentLoaded', function () {
   var tabBtnMail = document.getElementById('tab-btn-mail');
   var tabBtnIssues = document.getElementById('tab-btn-issues');
   var tabBtnOnetime = document.getElementById('tab-btn-onetime');
+  var tabBtnTbm = document.getElementById('tab-btn-tbm');
   var tabMail = document.getElementById('tab-mail');
   var tabIssues = document.getElementById('tab-issues');
   var tabOnetime = document.getElementById('tab-onetime');
+  var tabTbm = document.getElementById('tab-tbm');
   var onetimeIframe = document.getElementById('onetime-iframe');
   var onetimeRefreshBtn = document.getElementById('onetime-refresh-btn');
   var onetimeLastRefreshed = document.getElementById('onetime-last-refreshed');
@@ -63,20 +65,43 @@ document.addEventListener('DOMContentLoaded', function () {
   var emptyAssignedToMeRecent = document.getElementById('empty-assigned-to-me-recent');
   var countAssignedToMeRecent = document.getElementById('count-assigned-to-me-recent');
 
+  var viewTbmList = document.getElementById('view-tbm-list');
+  var viewTbmEdit = document.getElementById('view-tbm-edit');
+  var tbmRefreshBtn = document.getElementById('tbm-refresh-btn');
+  var tbmLastRefreshed = document.getElementById('tbm-last-refreshed');
+  var tbmStatus = document.getElementById('tbm-status');
+  var tbmList = document.getElementById('tbm-list');
+  var tbmEmpty = document.getElementById('tbm-empty');
+  var tbmEditSummary = document.getElementById('tbm-edit-summary');
+  var tbmIssueRefInput = document.getElementById('tbm-issue-ref');
+  var tbmProfileSelect = document.getElementById('tbm-profile');
+  var tbmCommentTextarea = document.getElementById('tbm-comment');
+  var tbmEditStatus = document.getElementById('tbm-edit-status');
+  var backTbmEditBtn = document.getElementById('back-tbm-edit-btn');
+  var tbmResolveBtn = document.getElementById('tbm-resolve-btn');
+  var tbmConfirm = document.getElementById('tbm-confirm');
+  var tbmConfirmText = document.getElementById('tbm-confirm-text');
+  var tbmConfirmCancelBtn = document.getElementById('tbm-confirm-cancel-btn');
+  var tbmConfirmApplyBtn = document.getElementById('tbm-confirm-apply-btn');
+
   // -- Mail / Issues tabs: popup always opens on the Mail tab; the Issues
   // tab is lazy-loaded the first time it's opened and cached until refreshed. --
 
   var issuesRawData = null;
   var issuesGroupBy = 'none';
   var issuesSortDir = 'desc';
+  var tbmRawEntries = null;
+  var tbmSelectedEntry = null;
 
   function showTab(name) {
     tabMail.style.display = name === 'mail' ? 'block' : 'none';
     tabIssues.style.display = name === 'issues' ? 'block' : 'none';
     tabOnetime.style.display = name === 'onetime' ? 'block' : 'none';
+    tabTbm.style.display = name === 'tbm' ? 'block' : 'none';
     tabBtnMail.classList.toggle('active', name === 'mail');
     tabBtnIssues.classList.toggle('active', name === 'issues');
     tabBtnOnetime.classList.toggle('active', name === 'onetime');
+    tabBtnTbm.classList.toggle('active', name === 'tbm');
   }
   tabBtnMail.addEventListener('click', function () { showTab('mail'); });
   tabBtnIssues.addEventListener('click', function () {
@@ -84,6 +109,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!issuesRawData) loadIssuesScreen(false);
   });
   tabBtnOnetime.addEventListener('click', function () { showTab('onetime'); });
+  tabBtnTbm.addEventListener('click', function () {
+    showTab('tbm');
+    viewTbmEdit.style.display = 'none';
+    viewTbmList.style.display = 'block';
+    if (!tbmRawEntries) loadTbmList();
+  });
 
   // -- OneTime tab: keeps the SAP session alive via a real iframe navigation
   // (see comment in popup.html) rather than the fetch-based background ping.
@@ -153,6 +184,165 @@ document.addEventListener('DOMContentLoaded', function () {
     issuesSortDir = issuesSortDir === 'desc' ? 'asc' : 'desc';
     issuesSortBtn.innerHTML = (issuesSortDir === 'asc' ? '&#8593;' : '&#8595;') + ' Date';
     renderIssuesScreen();
+  });
+
+  // -- TO_BE_MODIFIED tab: lists SAP time entries logged with a placeholder
+  // comment (see CONTEXT.md), and resolves one at a time by applying a real
+  // Time entry profile + Issue reference. See docs/adr/0001 for why applying
+  // a profile overwrites the entry's type de prestation/PSP/position wholesale. --
+
+  function loadTbmList() {
+    tbmRefreshBtn.disabled = true;
+    tbmStatus.style.color = '#555';
+    tbmStatus.textContent = 'Loading…';
+    withStorage(function (result) {
+      chrome.runtime.sendMessage({
+        action: 'fetchToBeModified',
+        sapCookies: result.sapCookies || ''
+      }, function (response) {
+        tbmRefreshBtn.disabled = false;
+        if (response && response.success) {
+          tbmRawEntries = response.entries;
+          tbmStatus.textContent = '';
+          renderTbmList();
+          var d = new Date();
+          tbmLastRefreshed.textContent = 'Last refreshed: ' +
+            String(d.getHours()).padStart(2, '0') + ':' +
+            String(d.getMinutes()).padStart(2, '0') + ':' +
+            String(d.getSeconds()).padStart(2, '0');
+        } else {
+          tbmRawEntries = null;
+          tbmStatus.style.color = 'red';
+          tbmStatus.textContent = (response && response.error) || 'Failed to load TO_BE_MODIFIED entries.';
+        }
+      });
+    });
+  }
+  tbmRefreshBtn.addEventListener('click', loadTbmList);
+
+  function renderTbmList() {
+    tbmList.innerHTML = '';
+    var entries = tbmRawEntries || [];
+    if (entries.length === 0) {
+      tbmEmpty.style.display = 'block';
+      tbmList.style.display = 'none';
+      return;
+    }
+    tbmEmpty.style.display = 'none';
+    tbmList.style.display = 'block';
+    entries.forEach(function (entry) {
+      var li = document.createElement('li');
+      li.className = 'template-item';
+      li.innerHTML =
+        '<div class="tbm-entry-row">' +
+          '<div class="tbm-entry-info">' +
+            '<div class="tbm-entry-date">' + escapeHtml(entry.date) + ' &middot; ' + escapeHtml(entry.startTime) + '&ndash;' + escapeHtml(entry.endTime) + '</div>' +
+            '<div class="tbm-entry-text">' + escapeHtml(entry.text) + '</div>' +
+          '</div>' +
+          '<button class="tbm-resolve-btn">Resolve</button>' +
+        '</div>';
+      li.querySelector('.tbm-resolve-btn').addEventListener('click', function () {
+        openTbmEdit(entry);
+      });
+      tbmList.appendChild(li);
+    });
+  }
+
+  function openTbmEdit(entry) {
+    tbmSelectedEntry = entry;
+    tbmEditStatus.textContent = '';
+    tbmIssueRefInput.value = '';
+    tbmCommentTextarea.value = '';
+    tbmConfirm.style.display = 'none';
+    tbmResolveBtn.style.display = '';
+    tbmEditSummary.textContent = entry.date + ' ' + entry.startTime + '–' + entry.endTime + ': ' + entry.text;
+
+    withStorage(function (result) {
+      var profiles = result.timeProfiles || [];
+      tbmProfileSelect.innerHTML = '';
+      if (profiles.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No profiles - configure in options';
+        opt.disabled = true;
+        opt.selected = true;
+        tbmProfileSelect.appendChild(opt);
+      } else {
+        profiles.forEach(function (p, i) {
+          var opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = p.name;
+          tbmProfileSelect.appendChild(opt);
+        });
+      }
+    });
+
+    viewTbmList.style.display = 'none';
+    viewTbmEdit.style.display = 'block';
+  }
+
+  backTbmEditBtn.addEventListener('click', function () {
+    viewTbmEdit.style.display = 'none';
+    viewTbmList.style.display = 'block';
+  });
+
+  tbmResolveBtn.addEventListener('click', function () {
+    var issueReference = tbmIssueRefInput.value.trim();
+    var comment = tbmCommentTextarea.value.trim();
+    var profileIndex = tbmProfileSelect.value;
+
+    tbmEditStatus.style.color = 'red';
+    if (profileIndex === '') { tbmEditStatus.textContent = 'Please select a profile.'; return; }
+    if (!comment) { tbmEditStatus.textContent = 'Please enter a comment.'; return; }
+    tbmEditStatus.textContent = '';
+
+    var profileName = tbmProfileSelect.options[tbmProfileSelect.selectedIndex].textContent;
+    var text = issueReference ? issueReference + ': ' + comment : comment;
+    tbmConfirmText.textContent = 'Apply profile "' + profileName + '" and set comment to "' + text + '" on the entry from ' + tbmSelectedEntry.date + ' ' + tbmSelectedEntry.startTime + '–' + tbmSelectedEntry.endTime + '?';
+    tbmConfirm.style.display = 'block';
+    tbmResolveBtn.style.display = 'none';
+  });
+
+  tbmConfirmCancelBtn.addEventListener('click', function () {
+    tbmConfirm.style.display = 'none';
+    tbmResolveBtn.style.display = '';
+  });
+
+  tbmConfirmApplyBtn.addEventListener('click', function () {
+    var issueReference = tbmIssueRefInput.value.trim();
+    var comment = tbmCommentTextarea.value.trim();
+    var profileIndex = parseInt(tbmProfileSelect.value);
+
+    tbmConfirmApplyBtn.disabled = true;
+    tbmEditStatus.style.color = '#555';
+    tbmEditStatus.textContent = 'Applying…';
+
+    withStorage(function (result) {
+      chrome.runtime.sendMessage({
+        action: 'resolveToBeModified',
+        entryKey: tbmSelectedEntry.key,
+        profileIndex: profileIndex,
+        issueReference: issueReference,
+        comment: comment,
+        sapCookies: result.sapCookies || ''
+      }, function (response) {
+        tbmConfirmApplyBtn.disabled = false;
+        if (response && response.success) {
+          tbmRawEntries = (tbmRawEntries || []).filter(function (e) { return e.key !== tbmSelectedEntry.key; });
+          tbmSelectedEntry = null;
+          tbmConfirm.style.display = 'none';
+          tbmResolveBtn.style.display = '';
+          renderTbmList();
+          viewTbmEdit.style.display = 'none';
+          viewTbmList.style.display = 'block';
+        } else {
+          tbmEditStatus.style.color = 'red';
+          tbmEditStatus.textContent = (response && response.error) || 'Failed to update entry.';
+          tbmConfirm.style.display = 'none';
+          tbmResolveBtn.style.display = '';
+        }
+      });
+    });
   });
 
   // Batch-load all storage keys at once so subsequent click handlers respond

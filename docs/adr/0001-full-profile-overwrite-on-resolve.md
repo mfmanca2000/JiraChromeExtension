@@ -1,0 +1,3 @@
+# Resolving a TO_BE_MODIFIED entry overwrites the whole Time entry profile, not just the PSP element
+
+When resolving a [[TO_BE_MODIFIED entry]] via a picked [[Time entry profile]], the SAP update overwrites `LstarKey`, `TargetElementType`/`TargetElementKey` (PSP element), and position wholesale — not just the PSP element. The obvious-looking alternative (only patch the PSP element, leave the rest alone) is wrong here: these entries were logged with placeholder values across the board at creation time, not just a missing PSP, so a partial patch would leave stale/incorrect data on the entry. Because this mutates an already-posted, real SAP record, the UI also requires an explicit confirm step before the update call fires.

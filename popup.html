@@ -251,6 +251,12 @@
     .te-prefix { font-size: 10px; color: #333; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 3px; padding: 3px 6px; margin-bottom: 6px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .onetime-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .onetime-last-refreshed { font-size: 10px; color: #999; }
+    .tbm-entry-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .tbm-entry-info { min-width: 0; }
+    .tbm-entry-date { font-weight: bold; font-size: 12px; }
+    .tbm-entry-text { font-size: 11px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tbm-resolve-btn { flex: none; font-size: 11px; color: #fff; background-color: #4285f4; border: none; border-radius: 3px; padding: 4px 8px; cursor: pointer; }
+    .tbm-resolve-btn:hover { background-color: #3367d6; }
     /* The iframe is rendered at a real desktop viewport size (so SAP Fiori
        keeps its full desktop layout instead of collapsing into its cramped
        mobile view) and then visually scaled down with a CSS transform to
@@ -281,6 +287,7 @@
     <button class="tab-btn active" id="tab-btn-mail">This JIRA</button>
     <button class="tab-btn" id="tab-btn-issues">Issues</button>
     <button class="tab-btn" id="tab-btn-onetime">OneTime</button>
+    <button class="tab-btn" id="tab-btn-tbm">TO_BE_MODIFIED</button>
   </div>
 
   <div id="tab-mail">
@@ -445,6 +452,54 @@
     </div>
     <div class="onetime-frame-wrap">
       <iframe id="onetime-iframe" class="onetime-frame"></iframe>
+    </div>
+  </div>
+
+  <!-- TO_BE_MODIFIED tab: lists SAP time entries logged with a TO_BE_MODIFIED
+       placeholder comment (see CONTEXT.md) - created when the PSP element and
+       Issue reference weren't known yet at logging time - and lets each one
+       be resolved once both are known. -->
+  <div id="tab-tbm" style="display:none">
+    <!-- View A: list of TO_BE_MODIFIED entries -->
+    <div id="view-tbm-list">
+      <div class="onetime-toolbar">
+        <span id="tbm-last-refreshed" class="onetime-last-refreshed"></span>
+        <button class="icon-btn" id="tbm-refresh-btn" title="Refresh">&#8635;</button>
+      </div>
+      <div id="tbm-status" class="status-msg"></div>
+      <ul id="tbm-list" class="template-list"></ul>
+      <div id="tbm-empty" class="status-msg" style="display:none">No TO_BE_MODIFIED entries in the last 30 days.</div>
+    </div>
+
+    <!-- View B: resolve one entry (apply a profile + Issue reference + comment) -->
+    <div id="view-tbm-edit" style="display:none">
+      <h3>Resolve Entry</h3>
+      <div id="tbm-edit-summary" class="te-prefix"></div>
+      <div class="te-row">
+        <span class="te-label" style="min-width:70px">Issue ref.</span>
+        <input type="text" id="tbm-issue-ref" class="te-input" placeholder="e.g. INC1234567">
+      </div>
+      <div class="te-row">
+        <span class="te-label" style="min-width:70px">Profile</span>
+        <select id="tbm-profile" class="te-input"></select>
+      </div>
+      <div class="te-row"><span class="te-label">Comment</span></div>
+      <textarea id="tbm-comment" class="te-comment-area" rows="2" placeholder="Investigation details..."></textarea>
+      <div id="tbm-edit-status" class="status-msg"></div>
+
+      <!-- Confirm panel: shown after "Resolve..." is clicked, before the SAP call fires -->
+      <div id="tbm-confirm" style="display:none;font-size:11px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:6px 8px;margin-bottom:6px">
+        <div id="tbm-confirm-text" style="margin-bottom:6px"></div>
+        <div style="display:flex;gap:6px">
+          <button class="options-link" id="tbm-confirm-cancel-btn">Cancel</button>
+          <button class="set-completed-btn" id="tbm-confirm-apply-btn" style="flex:1">Yes, apply</button>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button class="options-link" id="back-tbm-edit-btn">&#8592; Back</button>
+        <button class="set-completed-btn" id="tbm-resolve-btn">Resolve&hellip;</button>
+      </div>
     </div>
   </div>
 

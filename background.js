@@ -909,6 +909,181 @@ async function handleLogTime(payload, sendResponse) {
   }
 }
 
+// -- TO_BE_MODIFIED tab: lists/resolves SAP time entries logged with a
+// TO_BE_MODIFIED placeholder comment (see CONTEXT.md), created when the PSP
+// element and Issue reference weren't known yet at logging time. --
+
+const TBM_LOOKBACK_DAYS = 30;
+const TBM_PLACEHOLDER = 'TO_BE_MODIFIED';
+const TBM_LIST_DNR_RULE_ID = 44;
+const TBM_RESOLVE_DNR_RULE_ID = 45;
+
+function parseSapMsDate(str) {
+  const m = /\/Date\((\d+)\)\//.exec(str || '');
+  return m ? new Date(Number(m[1])) : null;
+}
+
+function parseSapDuration(str) {
+  const m = /^PT(\d{2})H(\d{2})M/.exec(str || '');
+  return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 0, m: 0 };
+}
+
+// Lists SAP time entries whose comment starts with TO_BE_MODIFIED, for the
+// configured employee number, within the last TBM_LOOKBACK_DAYS days.
+async function handleFetchToBeModified(payload, sendResponse) {
+  try {
+    const stored = await chrome.storage.local.get(['employeeNumber', 'sapCookies']);
+    const employeeNumber = stored.employeeNumber || '';
+    if (!employeeNumber) {
+      sendResponse({ success: false, error: 'Employee number not configured. Set it in Options.' });
+      return;
+    }
+
+    const sessionId = (payload.sapCookies || stored.sapCookies || '').trim();
+    if (!sessionId) {
+      sendResponse({ success: false, error: 'SAP Session ID is empty. Paste it in the Session ID field on the Log Time view.' });
+      return;
+    }
+    await new Promise(resolve => chrome.storage.local.set({ sapCookies: sessionId }, resolve));
+
+    const since = new Date();
+    since.setDate(since.getDate() - TBM_LOOKBACK_DAYS);
+    const sinceLiteral = since.toISOString().slice(0, 19);
+
+    const filter = `EmployeeNumber eq '${employeeNumber}' and StartDate ge datetime'${sinceLiteral}' and startswith(text,'${TBM_PLACEHOLDER}') eq true`;
+    const url = `${SAP_BASE}/sap/opu/odata/sap/Z_ONETIME_SRV/TimeEntrySet?sap-client=100&$format=json&$filter=${encodeURIComponent(filter)}`;
+
+    await installSapCookieRule(TBM_LIST_DNR_RULE_ID, buildSapCookieHeader(sessionId));
+    try {
+      const res = await fetch(url, { credentials: 'omit', headers: { 'Accept': 'application/json', ...SAP_HEADERS } });
+      if (res.status === 401) {
+        sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
+        return;
+      }
+      if (!res.ok) {
+        sendResponse({ success: false, error: `HTTP ${res.status} while listing TO_BE_MODIFIED entries.` });
+        return;
+      }
+      const body = await res.json();
+      const results = (body && body.d && body.d.results) || [];
+      const entries = results
+        // Client-side safety net in case the server-side $filter isn't honored as expected.
+        .filter(r => (r.text || '').indexOf(TBM_PLACEHOLDER) === 0)
+        .map(r => {
+          const date = parseSapMsDate(r.StartDate);
+          const start = parseSapDuration(r.StartTime);
+          const end = parseSapDuration(r.EndTime);
+          return {
+            key: r.__metadata && r.__metadata.uri,
+            date: date ? date.toISOString().slice(0, 10) : '',
+            startTime: sapPad(start.h) + ':' + sapPad(start.m),
+            endTime: sapPad(end.h) + ':' + sapPad(end.m),
+            text: r.text || ''
+          };
+        })
+        .filter(e => e.key);
+      sendResponse({ success: true, entries });
+    } finally {
+      await removeSapCookieRule(TBM_LIST_DNR_RULE_ID);
+    }
+  } catch (e) {
+    console.error('[SAP] fetchToBeModified failed:', e);
+    sendResponse({ success: false, error: e.message });
+  }
+}
+
+// Resolves one TO_BE_MODIFIED entry: applies the picked profile's LstarKey/
+// PSP element/position wholesale (see docs/adr/0001) and rewrites the comment
+// as "<issueReference>: <comment>". Uses X-HTTP-Method: MERGE tunnelled over
+// POST against the entry's own __metadata.uri - the standard SAP Gateway
+// partial-update pattern. NOT YET VERIFIED against a live entity key/response
+// shape - confirm against a real DevTools capture of a manual Fiori edit
+// before relying on this in production.
+async function handleResolveToBeModified(payload, sendResponse) {
+  try {
+    const stored = await chrome.storage.local.get(['timeProfiles', 'sapCookies']);
+    const profiles = stored.timeProfiles || [];
+    const profile = profiles[payload.profileIndex];
+    if (!profile) {
+      sendResponse({ success: false, error: 'Profile not found. It may have been deleted.' });
+      return;
+    }
+
+    const entryKey = payload.entryKey;
+    if (!entryKey) {
+      sendResponse({ success: false, error: 'Missing entry reference.' });
+      return;
+    }
+
+    const sessionId = (payload.sapCookies || stored.sapCookies || '').trim();
+    if (!sessionId) {
+      sendResponse({ success: false, error: 'SAP Session ID is empty. Paste it in the Session ID field on the Log Time view.' });
+      return;
+    }
+
+    const issueReference = (payload.issueReference || '').trim();
+    const comment = (payload.comment || '').trim();
+    const text = issueReference ? `${issueReference}: ${comment}` : comment;
+
+    const updatePayload = {
+      LstarKey: profile.lstarKey,
+      TargetElementType: profile.psp ? (profile.targetElementType || 'KAUFTR') : '',
+      TargetElementKey: profile.psp || '',
+      SubElementKey: profile.position || '',
+      text
+    };
+
+    await installSapCookieRule(TBM_RESOLVE_DNR_RULE_ID, buildSapCookieHeader(sessionId));
+    try {
+      let csrfToken = '';
+      try {
+        const csrfRes = await fetch(SAP_CSRF_URL, { credentials: 'omit', headers: { 'X-CSRF-Token': 'Fetch', ...SAP_HEADERS } });
+        if (csrfRes.status === 401) {
+          sendResponse({ success: false, error: 'SAP session expired (401). Please paste a fresh Session ID.' });
+          return;
+        }
+        csrfToken = csrfRes.headers.get('X-CSRF-Token') || '';
+      } catch (e) {
+        console.error('[SAP] CSRF fetch error:', e);
+      }
+
+      const updateUrl = entryKey.indexOf('sap-client=') === -1
+        ? entryKey + (entryKey.indexOf('?') === -1 ? '?' : '&') + 'sap-client=100'
+        : entryKey;
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-HTTP-Method': 'MERGE',
+        ...SAP_HEADERS
+      };
+      if (csrfToken) headers['x-csrf-token'] = csrfToken;
+
+      const res = await fetch(updateUrl, { method: 'POST', credentials: 'omit', headers, body: JSON.stringify(updatePayload) });
+      if (res.ok) {
+        sendResponse({ success: true });
+        return;
+      }
+
+      const errBody = await res.text();
+      console.log('[SAP] resolve TO_BE_MODIFIED error body:', errBody.substring(0, 500));
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const errJson = JSON.parse(errBody);
+        if (errJson.error && errJson.error.message && errJson.error.message.value) {
+          errMsg = errJson.error.message.value;
+        }
+      } catch (_) { /* ignore - body wasn't JSON */ }
+      sendResponse({ success: false, error: errMsg });
+    } finally {
+      await removeSapCookieRule(TBM_RESOLVE_DNR_RULE_ID);
+    }
+  } catch (e) {
+    console.error('[SAP] resolveToBeModified failed:', e);
+    sendResponse({ success: false, error: e.message });
+  }
+}
+
 // Fetches the SAP session cookie for the current browser first (covers the case where
 // the user is already Kerberos-authenticated on the SAP page in this same Chrome profile),
 // falling back to the Edge bridge/bookmarklet relay only if Chrome doesn't have it.
@@ -959,6 +1134,16 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
 
   if (message.action === 'logTime') {
     handleLogTime(message, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'fetchToBeModified') {
+    handleFetchToBeModified(message, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'resolveToBeModified') {
+    handleResolveToBeModified(message, sendResponse);
     return true;
   }
 
