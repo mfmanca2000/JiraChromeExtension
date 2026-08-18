@@ -194,27 +194,36 @@ document.addEventListener('DOMContentLoaded', function () {
   function loadTbmList() {
     tbmRefreshBtn.disabled = true;
     tbmStatus.style.color = '#555';
-    tbmStatus.textContent = 'Loading…';
-    withStorage(function (result) {
-      chrome.runtime.sendMessage({
-        action: 'fetchToBeModified',
-        sapCookies: result.sapCookies || ''
-      }, function (response) {
-        tbmRefreshBtn.disabled = false;
-        if (response && response.success) {
-          tbmRawEntries = response.entries;
-          tbmStatus.textContent = '';
-          renderTbmList();
-          var d = new Date();
-          tbmLastRefreshed.textContent = 'Last refreshed: ' +
-            String(d.getHours()).padStart(2, '0') + ':' +
-            String(d.getMinutes()).padStart(2, '0') + ':' +
-            String(d.getSeconds()).padStart(2, '0');
-        } else {
-          tbmRawEntries = null;
-          tbmStatus.style.color = 'red';
-          tbmStatus.textContent = (response && response.error) || 'Failed to load TO_BE_MODIFIED entries.';
-        }
+    tbmStatus.textContent = 'Refreshing SAP session…';
+    // Always pull a fresh session cookie first, the same way the Log Time view does
+    // on open (popup.js `logTimeBtn` handler) - a value merely cached from a past
+    // popup open is likely stale and gets every SAP call 403'd, including the CSRF
+    // handshake itself.
+    chrome.runtime.sendMessage({ action: 'getEdgeSapCookie' }, function (cookieResponse) {
+      var freshSessionId = (cookieResponse && cookieResponse.success) ? cookieResponse.sessionId : null;
+      withStorage(function (result) {
+        var sessionId = freshSessionId || result.sapCookies || '';
+        tbmStatus.textContent = 'Loading…';
+        chrome.runtime.sendMessage({
+          action: 'fetchToBeModified',
+          sapCookies: sessionId
+        }, function (response) {
+          tbmRefreshBtn.disabled = false;
+          if (response && response.success) {
+            tbmRawEntries = response.entries;
+            tbmStatus.textContent = '';
+            renderTbmList();
+            var d = new Date();
+            tbmLastRefreshed.textContent = 'Last refreshed: ' +
+              String(d.getHours()).padStart(2, '0') + ':' +
+              String(d.getMinutes()).padStart(2, '0') + ':' +
+              String(d.getSeconds()).padStart(2, '0');
+          } else {
+            tbmRawEntries = null;
+            tbmStatus.style.color = 'red';
+            tbmStatus.textContent = (response && response.error) || 'Failed to load TO_BE_MODIFIED entries.';
+          }
+        });
       });
     });
   }
@@ -317,30 +326,34 @@ document.addEventListener('DOMContentLoaded', function () {
     tbmEditStatus.style.color = '#555';
     tbmEditStatus.textContent = 'Applying…';
 
-    withStorage(function (result) {
-      chrome.runtime.sendMessage({
-        action: 'resolveToBeModified',
-        entryKey: tbmSelectedEntry.key,
-        profileIndex: profileIndex,
-        issueReference: issueReference,
-        comment: comment,
-        sapCookies: result.sapCookies || ''
-      }, function (response) {
-        tbmConfirmApplyBtn.disabled = false;
-        if (response && response.success) {
-          tbmRawEntries = (tbmRawEntries || []).filter(function (e) { return e.key !== tbmSelectedEntry.key; });
-          tbmSelectedEntry = null;
-          tbmConfirm.style.display = 'none';
-          tbmResolveBtn.style.display = '';
-          renderTbmList();
-          viewTbmEdit.style.display = 'none';
-          viewTbmList.style.display = 'block';
-        } else {
-          tbmEditStatus.style.color = 'red';
-          tbmEditStatus.textContent = (response && response.error) || 'Failed to update entry.';
-          tbmConfirm.style.display = 'none';
-          tbmResolveBtn.style.display = '';
-        }
+    chrome.runtime.sendMessage({ action: 'getEdgeSapCookie' }, function (cookieResponse) {
+      var freshSessionId = (cookieResponse && cookieResponse.success) ? cookieResponse.sessionId : null;
+      withStorage(function (result) {
+        var sessionId = freshSessionId || result.sapCookies || '';
+        chrome.runtime.sendMessage({
+          action: 'resolveToBeModified',
+          entryKey: tbmSelectedEntry.key,
+          profileIndex: profileIndex,
+          issueReference: issueReference,
+          comment: comment,
+          sapCookies: sessionId
+        }, function (response) {
+          tbmConfirmApplyBtn.disabled = false;
+          if (response && response.success) {
+            tbmRawEntries = (tbmRawEntries || []).filter(function (e) { return e.key !== tbmSelectedEntry.key; });
+            tbmSelectedEntry = null;
+            tbmConfirm.style.display = 'none';
+            tbmResolveBtn.style.display = '';
+            renderTbmList();
+            viewTbmEdit.style.display = 'none';
+            viewTbmList.style.display = 'block';
+          } else {
+            tbmEditStatus.style.color = 'red';
+            tbmEditStatus.textContent = (response && response.error) || 'Failed to update entry.';
+            tbmConfirm.style.display = 'none';
+            tbmResolveBtn.style.display = '';
+          }
+        });
       });
     });
   });
