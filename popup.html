@@ -101,7 +101,7 @@
       justify-content: space-between;
       gap: 6px;
     }
-    .issue-assign-btn {
+    .issue-assign-btn, .issue-set-tracking-btn {
       flex: none;
       font-size: 12px;
       background: transparent;
@@ -116,11 +116,11 @@
       cursor: pointer;
       padding: 0;
     }
-    .issue-assign-btn:hover:not(:disabled) {
+    .issue-assign-btn:hover:not(:disabled), .issue-set-tracking-btn:hover:not(:disabled) {
       background-color: #e8f0fe;
       border-color: #4285f4;
     }
-    .issue-assign-btn:disabled {
+    .issue-assign-btn:disabled, .issue-set-tracking-btn:disabled {
       color: #ccc;
       border-color: #eee;
       cursor: default;

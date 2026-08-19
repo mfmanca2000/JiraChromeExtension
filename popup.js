@@ -1027,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', function () {
     issuesLastRefreshed.textContent = 'Last refreshed: ' + hh + ':' + mm + ':' + ss;
   }
 
-  function buildIssueRow(issue, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel) {
+  function buildIssueRow(issue, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel, showSetTracking) {
     highlightField = highlightField || 'relevantDate';
     highlightLabel = highlightLabel || 'Due';
     var li = document.createElement('li');
@@ -1066,8 +1066,33 @@ document.addEventListener('DOMContentLoaded', function () {
     if (showAssignToMe) {
       rowHtml += '<button class="issue-assign-btn" title="Assign to Me">&#128100;</button>';
     }
+    if (showSetTracking) {
+      rowHtml += '<button class="issue-set-tracking-btn" title="Set Next Tracking Date to end of next month">&#128197;</button>';
+    }
     rowHtml += '</div>';
     li.innerHTML = rowHtml;
+
+    if (showSetTracking) {
+      var setTrackingBtn = li.querySelector('.issue-set-tracking-btn');
+      setTrackingBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setTrackingBtn.disabled = true;
+        var prevTitle = setTrackingBtn.title;
+        setTrackingBtn.title = 'Working…';
+        chrome.runtime.sendMessage({ action: 'setNextTrackingDate', issueKey: issue.key }, function (response) {
+          if (response && response.success) {
+            if (issuesRawData) {
+              issue.nextTrackingDate = response.nextTrackingDate ? new Date(response.nextTrackingDate).toISOString() : issue.nextTrackingDate;
+              issuesRawData.assignedToMeNoTracking = (issuesRawData.assignedToMeNoTracking || []).filter(function (i) { return i.key !== issue.key; });
+            }
+            renderAssignedToMeNoTracking();
+          } else {
+            setTrackingBtn.disabled = false;
+            setTrackingBtn.title = (response && response.error) || prevTitle;
+          }
+        });
+      });
+    }
 
     if (showAssignToMe) {
       var assignBtn = li.querySelector('.issue-assign-btn');
@@ -1099,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return li;
   }
 
-  function renderGrouped(listEl, issues, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel) {
+  function renderGrouped(listEl, issues, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel, showSetTracking) {
     var groups = {};
     issues.forEach(function (i) {
       (groups[i.projectKey] = groups[i.projectKey] || []).push(i);
@@ -1109,11 +1134,11 @@ document.addEventListener('DOMContentLoaded', function () {
       h.className = 'template-item no-template-item';
       h.innerHTML = '<div class="template-name">' + escapeHtml(proj) + '</div>';
       listEl.appendChild(h);
-      groups[proj].forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel)); });
+      groups[proj].forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel, showSetTracking)); });
     });
   }
 
-  function renderSection(listEl, emptyEl, countEl, issues, highlightDates, dateField, showAssignToMe, highlightField, highlightLabel) {
+  function renderSection(listEl, emptyEl, countEl, issues, highlightDates, dateField, showAssignToMe, highlightField, highlightLabel, showSetTracking) {
     var showUpdated = dateField === 'updated';
     var sorted = sortIssues(issues, dateField);
     countEl.textContent = '(' + sorted.length + ')';
@@ -1126,9 +1151,9 @@ document.addEventListener('DOMContentLoaded', function () {
     emptyEl.style.display = 'none';
     listEl.style.display = 'block';
     if (issuesGroupBy === 'project') {
-      renderGrouped(listEl, sorted, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel);
+      renderGrouped(listEl, sorted, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel, showSetTracking);
     } else {
-      sorted.forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel)); });
+      sorted.forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel, showSetTracking)); });
     }
   }
 
@@ -1137,12 +1162,17 @@ document.addEventListener('DOMContentLoaded', function () {
       (issuesRawData && issuesRawData.assignedToMeInProgress) || [], false, 'created', false);
   }
 
+  function renderAssignedToMeNoTracking() {
+    renderSection(listAssignedToMeNoTracking, emptyAssignedToMeNoTracking, countAssignedToMeNoTracking,
+      (issuesRawData && issuesRawData.assignedToMeNoTracking) || [], true, 'created', false, 'nextTrackingDate', 'Next tracking', true);
+  }
+
   function renderIssuesScreen() {
     if (!issuesRawData) return;
     renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
     renderAssignedToMeInProgress();
     renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe || [], true, 'created');
-    renderSection(listAssignedToMeNoTracking, emptyAssignedToMeNoTracking, countAssignedToMeNoTracking, issuesRawData.assignedToMeNoTracking || [], true, 'created', false, 'nextTrackingDate', 'Next tracking');
+    renderAssignedToMeNoTracking();
     renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent || [], false, 'updated');
   }
 });

@@ -274,6 +274,41 @@ function computeNextTrackingDate(fields) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Last day of next month, as a plain "YYYY-MM-DD" string (matches the
+// plain-date-string shape used elsewhere for customfield_11725/duedate).
+function endOfNextMonthDateString() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Sets "Next Tracking Date" (customfield_25226) directly via a field PUT
+// (no workflow transition involved, unlike handleAssignToMe/handleAddLabel -
+// this field isn't gated behind a transition screen). Used by the Issues
+// tab's "no/past tracking date" section.
+async function handleSetNextTrackingDate(issueKey, sendResponse) {
+  try {
+    if (!issueKey) throw new Error('Missing issue key');
+    const base = 'https://issue.swisscom.ch/rest/api/2';
+    const dateStr = endOfNextMonthDateString();
+    const res = await fetch(`${base}/issue/${issueKey}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { customfield_25226: dateStr } })
+    });
+    if (!res.ok) throw new Error(`Update failed (HTTP ${res.status})`);
+    sendResponse({ success: true, nextTrackingDate: dateStr });
+    // Refresh the Issues tab cache in the background so the issue drops out
+    // of "no/past tracking date" without waiting for the next alarm.
+    buildIssuesScreenData(true).catch(function (e) {
+      console.error('[SetNextTrackingDate] cache refresh failed:', e);
+    });
+  } catch (err) {
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
 function enrichIssue(issue) {
   const f = issue.fields || {};
   const relevantDate = computeRelevantDate(f);
@@ -1236,6 +1271,11 @@ chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
 
   if (message.action === 'assignToMe') {
     handleAssignToMe(sendResponse, message.issueKey || null);
+    return true; // keep channel open for async response
+  }
+
+  if (message.action === 'setNextTrackingDate') {
+    handleSetNextTrackingDate(message.issueKey, sendResponse);
     return true; // keep channel open for async response
   }
 
