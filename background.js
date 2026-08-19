@@ -274,12 +274,20 @@ function computeNextTrackingDate(fields) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Last day of next month, as a plain "YYYY-MM-DD" string (matches the
-// plain-date-string shape used elsewhere for customfield_11725/duedate).
-function endOfNextMonthDateString() {
+// Last day of next month at 23:59 local time, as a full Jira date-time
+// string ("yyyy-MM-ddTHH:mm:ss.SSS+ZZZZ") - customfield_25226 is a
+// DateTime picker, not a plain Date one, and rejects a bare "YYYY-MM-DD".
+function endOfNextMonthDateTimeString() {
   const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const d = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad(Math.abs(offsetMin) % 60);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) +
+    '.000' + sign + offH + offM;
 }
 
 // Sets "Next Tracking Date" (customfield_25226). A direct field PUT gets
@@ -290,7 +298,7 @@ async function handleSetNextTrackingDate(issueKey, sendResponse) {
   try {
     if (!issueKey) throw new Error('Missing issue key');
     const base = 'https://issue.swisscom.ch/rest/api/2';
-    const dateStr = endOfNextMonthDateString();
+    const dateStr = endOfNextMonthDateTimeString();
 
     const transRes = await fetch(`${base}/issue/${issueKey}/transitions?expand=transitions.fields`, {
       credentials: 'include'
