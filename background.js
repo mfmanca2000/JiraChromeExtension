@@ -320,6 +320,7 @@ function enrichIssue(issue) {
     updated: f.updated || null,
     projectKey: (f.project && f.project.key) || issue.key.split('-')[0],
     status: (f.status && f.status.name) || '',
+    issueType: (f.issuetype && f.issuetype.name) || '',
     isRFC: !!(f.issuetype && f.issuetype.name === 'Request for Change'),
     relevantDate: relevantDate ? relevantDate.toISOString() : null,
     nextTrackingDate: nextTrackingDate ? nextTrackingDate.toISOString() : null
@@ -378,7 +379,12 @@ async function buildIssuesScreenData(forceRefresh) {
   const assignedToMeInProgress = assignedToMeAll.filter(i => i.status === 'In Progress');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const assignedToMeNoTracking = assignedToMeAll.filter(i => !i.isRFC && (!i.nextTrackingDate || new Date(i.nextTrackingDate) < today));
+  // These issue types don't use "Next Tracking Date" as their tracking
+  // signal, so they'd otherwise show up here spuriously (RFCs use the due
+  // date instead; Task/OP Change/OP Change Light don't track this field at all).
+  const NO_TRACKING_EXCLUDED_TYPES = ['Request for Change', 'Task', 'OP Change', 'OP Change Light'];
+  const assignedToMeNoTracking = assignedToMeAll.filter(i =>
+    !NO_TRACKING_EXCLUDED_TYPES.includes(i.issueType) && (!i.nextTrackingDate || new Date(i.nextTrackingDate) < today));
   const assignedToMeRecent = recentIssues.map(enrichIssue);
 
   const data = { unassigned, assignedToMe, assignedToMeInProgress, assignedToMeNoTracking, assignedToMeRecent, fetchedAt: Date.now() };
