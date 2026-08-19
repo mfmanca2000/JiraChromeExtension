@@ -378,7 +378,7 @@ async function buildIssuesScreenData(forceRefresh) {
   const assignedToMeInProgress = assignedToMeAll.filter(i => i.status === 'In Progress');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const assignedToMeNoTracking = assignedToMeAll.filter(i => !i.nextTrackingDate || new Date(i.nextTrackingDate) < today);
+  const assignedToMeNoTracking = assignedToMeAll.filter(i => !i.isRFC && (!i.nextTrackingDate || new Date(i.nextTrackingDate) < today));
   const assignedToMeRecent = recentIssues.map(enrichIssue);
 
   const data = { unassigned, assignedToMe, assignedToMeInProgress, assignedToMeNoTracking, assignedToMeRecent, fetchedAt: Date.now() };
