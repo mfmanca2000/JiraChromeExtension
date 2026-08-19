@@ -62,6 +62,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var listAssignedToMe = document.getElementById('list-assigned-to-me');
   var emptyAssignedToMe = document.getElementById('empty-assigned-to-me');
   var countAssignedToMe = document.getElementById('count-assigned-to-me');
+  var listAssignedToMeNoTracking = document.getElementById('list-assigned-to-me-no-tracking');
+  var emptyAssignedToMeNoTracking = document.getElementById('empty-assigned-to-me-no-tracking');
+  var countAssignedToMeNoTracking = document.getElementById('count-assigned-to-me-no-tracking');
   var listAssignedToMeRecent = document.getElementById('list-assigned-to-me-recent');
   var emptyAssignedToMeRecent = document.getElementById('empty-assigned-to-me-recent');
   var countAssignedToMeRecent = document.getElementById('count-assigned-to-me-recent');
@@ -1024,12 +1027,15 @@ document.addEventListener('DOMContentLoaded', function () {
     issuesLastRefreshed.textContent = 'Last refreshed: ' + hh + ':' + mm + ':' + ss;
   }
 
-  function buildIssueRow(issue, highlightDates, showUpdated, showAssignToMe) {
+  function buildIssueRow(issue, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel) {
+    highlightField = highlightField || 'relevantDate';
+    highlightLabel = highlightLabel || 'Due';
     var li = document.createElement('li');
     li.className = 'template-item issue-item';
     var isOverdue = false;
-    if (highlightDates && issue.relevantDate) {
-      var d = new Date(issue.relevantDate);
+    var highlightVal = issue[highlightField];
+    if (highlightDates && highlightVal) {
+      var d = new Date(highlightVal);
       var today = new Date();
       today.setHours(0, 0, 0, 0);
       if (d < today) {
@@ -1045,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var metaParts = [issue.projectKey, issue.status];
     if (showUpdated && issue.updated) metaParts.push('Updated ' + formatDateTime(issue.updated));
     else if (issue.created) metaParts.push('Created ' + formatDateTime(issue.created));
-    if (highlightDates && issue.relevantDate) metaParts.push('Due ' + formatDate(issue.relevantDate));
+    if (highlightDates && highlightVal) metaParts.push(highlightLabel + ' ' + formatDate(highlightVal));
     var meta = metaParts.filter(Boolean).join(' · ');
 
     var browseUrl = 'https://issue.swisscom.ch/browse/' + issue.key;
@@ -1093,7 +1099,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return li;
   }
 
-  function renderGrouped(listEl, issues, highlightDates, showUpdated, showAssignToMe) {
+  function renderGrouped(listEl, issues, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel) {
     var groups = {};
     issues.forEach(function (i) {
       (groups[i.projectKey] = groups[i.projectKey] || []).push(i);
@@ -1103,11 +1109,11 @@ document.addEventListener('DOMContentLoaded', function () {
       h.className = 'template-item no-template-item';
       h.innerHTML = '<div class="template-name">' + escapeHtml(proj) + '</div>';
       listEl.appendChild(h);
-      groups[proj].forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe)); });
+      groups[proj].forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel)); });
     });
   }
 
-  function renderSection(listEl, emptyEl, countEl, issues, highlightDates, dateField, showAssignToMe) {
+  function renderSection(listEl, emptyEl, countEl, issues, highlightDates, dateField, showAssignToMe, highlightField, highlightLabel) {
     var showUpdated = dateField === 'updated';
     var sorted = sortIssues(issues, dateField);
     countEl.textContent = '(' + sorted.length + ')';
@@ -1120,9 +1126,9 @@ document.addEventListener('DOMContentLoaded', function () {
     emptyEl.style.display = 'none';
     listEl.style.display = 'block';
     if (issuesGroupBy === 'project') {
-      renderGrouped(listEl, sorted, highlightDates, showUpdated, showAssignToMe);
+      renderGrouped(listEl, sorted, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel);
     } else {
-      sorted.forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe)); });
+      sorted.forEach(function (i) { listEl.appendChild(buildIssueRow(i, highlightDates, showUpdated, showAssignToMe, highlightField, highlightLabel)); });
     }
   }
 
@@ -1136,6 +1142,7 @@ document.addEventListener('DOMContentLoaded', function () {
     renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
     renderAssignedToMeInProgress();
     renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe, true, 'created');
+    renderSection(listAssignedToMeNoTracking, emptyAssignedToMeNoTracking, countAssignedToMeNoTracking, issuesRawData.assignedToMeNoTracking, true, 'created', false, 'nextTrackingDate', 'Next tracking');
     renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent, false, 'updated');
   }
 });

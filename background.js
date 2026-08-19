@@ -238,7 +238,7 @@ async function fetchBoardIssuesForFilter(base, rapidViewId, jql, extraJql) {
   const combined = extraJql ? `(${jql}) AND ${extraJql}` : jql;
   const url = `${base}/rest/agile/1.0/board/${encodeURIComponent(rapidViewId)}/issue` +
     `?jql=${encodeURIComponent(combined)}` +
-    `&fields=summary,created,updated,project,issuetype,customfield_11725,duedate,status&maxResults=200`;
+    `&fields=summary,created,updated,project,issuetype,customfield_11725,customfield_25226,duedate,status&maxResults=200`;
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`Board issue fetch failed (HTTP ${res.status})`);
   const data = await res.json();
@@ -264,9 +264,20 @@ function computeRelevantDate(fields) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// "Next Tracking Date" - a separate custom field from the ITSM Target
+// Date/due date used for relevantDate above. Same defensive unwrap since its
+// on-the-wire shape hasn't been confirmed either.
+function computeNextTrackingDate(fields) {
+  const raw = unwrapCustomDateField(fields.customfield_25226);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function enrichIssue(issue) {
   const f = issue.fields || {};
   const relevantDate = computeRelevantDate(f);
+  const nextTrackingDate = computeNextTrackingDate(f);
   return {
     key: issue.key,
     summary: f.summary || '',
@@ -275,7 +286,8 @@ function enrichIssue(issue) {
     projectKey: (f.project && f.project.key) || issue.key.split('-')[0],
     status: (f.status && f.status.name) || '',
     isRFC: !!(f.issuetype && f.issuetype.name === 'Request for Change'),
-    relevantDate: relevantDate ? relevantDate.toISOString() : null
+    relevantDate: relevantDate ? relevantDate.toISOString() : null,
+    nextTrackingDate: nextTrackingDate ? nextTrackingDate.toISOString() : null
   };
 }
 
@@ -326,9 +338,12 @@ async function buildIssuesScreenData(forceRefresh) {
   const assignedToMeAll = assignedIssuesAll.map(enrichIssue);
   const assignedToMe = assignedToMeAll.filter(i => i.relevantDate && new Date(i.relevantDate) <= windowEnd);
   const assignedToMeInProgress = assignedToMeAll.filter(i => i.status === 'In Progress');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const assignedToMeNoTracking = assignedToMeAll.filter(i => !i.nextTrackingDate || new Date(i.nextTrackingDate) < today);
   const assignedToMeRecent = recentIssues.map(enrichIssue);
 
-  const data = { unassigned, assignedToMe, assignedToMeInProgress, assignedToMeRecent, fetchedAt: Date.now() };
+  const data = { unassigned, assignedToMe, assignedToMeInProgress, assignedToMeNoTracking, assignedToMeRecent, fetchedAt: Date.now() };
   await chrome.storage.session.set({ [ISSUES_SCREEN_CACHE_KEY]: { data, ts: Date.now() } });
   updateBadgeFromCount(unassigned.length);
   return data;
