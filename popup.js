@@ -1141,8 +1141,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!issuesRawData) return;
     renderSection(listUnassigned, emptyUnassigned, countUnassigned, issuesRawData.unassigned, false, 'created', true);
     renderAssignedToMeInProgress();
-    renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe, true, 'created');
-    renderSection(listAssignedToMeNoTracking, emptyAssignedToMeNoTracking, countAssignedToMeNoTracking, issuesRawData.assignedToMeNoTracking, true, 'created', false, 'nextTrackingDate', 'Next tracking');
-    renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent, false, 'updated');
+    renderSection(listAssignedToMe, emptyAssignedToMe, countAssignedToMe, issuesRawData.assignedToMe || [], true, 'created');
+    renderSection(listAssignedToMeNoTracking, emptyAssignedToMeNoTracking, countAssignedToMeNoTracking, issuesRawData.assignedToMeNoTracking || [], true, 'created', false, 'nextTrackingDate', 'Next tracking');
+    renderSection(listAssignedToMeRecent, emptyAssignedToMeRecent, countAssignedToMeRecent, issuesRawData.assignedToMeRecent || [], false, 'updated');
   }
 });

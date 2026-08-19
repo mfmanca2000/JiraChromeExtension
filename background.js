@@ -291,7 +291,10 @@ function enrichIssue(issue) {
   };
 }
 
-const ISSUES_SCREEN_CACHE_KEY = 'issuesScreenData';
+// Bump the suffix whenever the cached data's shape changes, so stale
+// entries from an older background.js version (missing new fields) get
+// skipped instead of crashing the popup's renderer.
+const ISSUES_SCREEN_CACHE_KEY = 'issuesScreenData_v2';
 // Slightly longer than the 5-minute badge alarm's period, so that alarm keeps
 // this cache continuously warm (see updateUnassignedBadge below) and popup
 // opens almost always hit the cache instead of live-fetching from Jira.
