@@ -282,22 +282,31 @@ function endOfNextMonthDateString() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
-// Sets "Next Tracking Date" (customfield_25226) directly via a field PUT
-// (no workflow transition involved, unlike handleAssignToMe/handleAddLabel -
-// this field isn't gated behind a transition screen). Used by the Issues
-// tab's "no/past tracking date" section.
+// Sets "Next Tracking Date" (customfield_25226). A direct field PUT gets
+// rejected ("not on the appropriate screen") - like handleAssignToMe, this
+// field is only editable via the self-looping "Edit Issue" transition
+// screen, so route the update through that transition instead.
 async function handleSetNextTrackingDate(issueKey, sendResponse) {
   try {
     if (!issueKey) throw new Error('Missing issue key');
     const base = 'https://issue.swisscom.ch/rest/api/2';
     const dateStr = endOfNextMonthDateString();
-    const res = await fetch(`${base}/issue/${issueKey}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { customfield_25226: dateStr } })
+
+    const transRes = await fetch(`${base}/issue/${issueKey}/transitions?expand=transitions.fields`, {
+      credentials: 'include'
     });
-    if (!res.ok) throw new Error(`Update failed (HTTP ${res.status})`);
+    if (!transRes.ok) throw new Error(`Could not fetch transitions (HTTP ${transRes.status})`);
+    const transData = await transRes.json();
+    const editTransition = transData.transitions.find(t => t.name === 'Edit Issue');
+    if (!editTransition) throw new Error('"Edit Issue" transition not available from the current status');
+    if (!editTransition.fields || !editTransition.fields.customfield_25226) {
+      throw new Error('"Next Tracking Date" field not found on the "Edit Issue" transition');
+    }
+
+    await postTransition(base, issueKey, editTransition.id, {
+      customfield_25226: dateStr
+    });
+
     sendResponse({ success: true, nextTrackingDate: dateStr });
     // Refresh the Issues tab cache in the background so the issue drops out
     // of "no/past tracking date" without waiting for the next alarm.
@@ -382,7 +391,7 @@ async function buildIssuesScreenData(forceRefresh) {
   // These issue types don't use "Next Tracking Date" as their tracking
   // signal, so they'd otherwise show up here spuriously (RFCs use the due
   // date instead; Task/OP Change/OP Change Light don't track this field at all).
-  const NO_TRACKING_EXCLUDED_TYPES = ['Request for Change', 'Task', 'OP Change', 'OP Change Light', 'OP Task'];
+  const NO_TRACKING_EXCLUDED_TYPES = ['Request for Change', 'Task', 'OP Change', 'OP Change Light', 'OP Task', 'OP Task (sub)'];
   const assignedToMeNoTracking = assignedToMeAll.filter(i =>
     !NO_TRACKING_EXCLUDED_TYPES.includes(i.issueType) && (!i.nextTrackingDate || new Date(i.nextTrackingDate) < today));
   const assignedToMeRecent = recentIssues.map(enrichIssue);
