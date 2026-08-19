@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var tabBtnIssues = document.getElementById('tab-btn-issues');
   var tabBtnOnetime = document.getElementById('tab-btn-onetime');
   var tabBtnTbm = document.getElementById('tab-btn-tbm');
+  var tbmBadge = document.getElementById('tbm-badge');
   var tabMail = document.getElementById('tab-mail');
   var tabIssues = document.getElementById('tab-issues');
   var tabOnetime = document.getElementById('tab-onetime');
@@ -227,6 +228,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tbmRawEntries = response.entries;
             tbmStatus.textContent = '';
             renderTbmList();
+            updateTbmBadge();
             var d = new Date();
             tbmLastRefreshedLabel = 'Last refreshed: ' +
               String(d.getHours()).padStart(2, '0') + ':' +
@@ -248,6 +250,30 @@ document.addEventListener('DOMContentLoaded', function () {
   function persistTbmCache() {
     chrome.storage.local.set({ tbmCache: { entries: tbmRawEntries || [], lastRefreshed: tbmLastRefreshedLabel } });
   }
+
+  // Shows the count of pending TO_BE_MODIFIED entries on the tab button itself,
+  // so it's visible without having to open the tab first.
+  function updateTbmBadge() {
+    var count = (tbmRawEntries || []).length;
+    if (count > 0) {
+      tbmBadge.textContent = count > 99 ? '99+' : String(count);
+      tbmBadge.style.display = 'inline-block';
+    } else {
+      tbmBadge.style.display = 'none';
+    }
+  }
+
+  // Preload the last-known cache (no SAP fetch) as soon as the popup opens so
+  // the badge count is ready immediately, mirroring the tab-click cache path.
+  chrome.storage.local.get('tbmCache', function (result) {
+    if (result.tbmCache && result.tbmCache.entries) {
+      tbmRawEntries = result.tbmCache.entries;
+      tbmLastRefreshedLabel = result.tbmCache.lastRefreshed || '';
+      tbmLastRefreshed.textContent = tbmLastRefreshedLabel;
+      renderTbmList();
+      updateTbmBadge();
+    }
+  });
 
   function renderTbmList() {
     tbmList.innerHTML = '';
@@ -365,6 +391,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tbmConfirm.style.display = 'none';
             tbmResolveBtn.style.display = '';
             renderTbmList();
+            updateTbmBadge();
             persistTbmCache();
             viewTbmEdit.style.display = 'none';
             viewTbmList.style.display = 'block';

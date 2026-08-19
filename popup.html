@@ -29,6 +29,17 @@
       color: #fff;
       border-color: #4285f4;
     }
+    .tab-badge {
+      display: none;
+      margin-left: 3px;
+      font-size: 9px;
+      font-weight: bold;
+      background: #d93025;
+      color: #fff;
+      border-radius: 8px;
+      padding: 1px 5px;
+      line-height: 1.4;
+    }
     .issues-last-refreshed {
       font-size: 10px;
       color: #999;
@@ -287,7 +298,7 @@
     <button class="tab-btn active" id="tab-btn-mail">This JIRA</button>
     <button class="tab-btn" id="tab-btn-issues">Issues</button>
     <button class="tab-btn" id="tab-btn-onetime">OneTime</button>
-    <button class="tab-btn" id="tab-btn-tbm">TO_BE_MODIFIED</button>
+    <button class="tab-btn" id="tab-btn-tbm">TO_BE_MODIFIED<span id="tbm-badge" class="tab-badge"></span></button>
   </div>
 
   <div id="tab-mail">
