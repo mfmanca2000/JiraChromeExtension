@@ -1058,7 +1058,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var warningIcon = isOverdue ? '<span class="issue-warning" title="Overdue">&#9888;&#65039;</span> ' : '';
     var rowHtml =
       '<div class="issue-row-main">' +
-        '<div>' +
+        '<div class="issue-row-text">' +
           '<div class="template-name">' + warningIcon + '<a href="' + escapeHtml(browseUrl) + '" target="_blank">' +
             escapeHtml(issue.key) + '</a> — ' + escapeHtml(issue.summary) + '</div>' +
           '<div class="template-preview">' + escapeHtml(meta) + '</div>' +
