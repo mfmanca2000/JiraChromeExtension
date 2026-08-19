@@ -399,7 +399,7 @@ async function buildIssuesScreenData(forceRefresh) {
   // These issue types don't use "Next Tracking Date" as their tracking
   // signal, so they'd otherwise show up here spuriously (RFCs use the due
   // date instead; Task/OP Change/OP Change Light don't track this field at all).
-  const NO_TRACKING_EXCLUDED_TYPES = ['Request for Change', 'Task', 'OP Change', 'OP Change Light', 'OP Task', 'OP Task (sub)'];
+  const NO_TRACKING_EXCLUDED_TYPES = ['Request for Change', 'Task', 'OP Change', 'OP Change Light', 'OP Task', 'OP Task (sub)', 'Modification Request'];
   const assignedToMeNoTracking = assignedToMeAll.filter(i =>
     !NO_TRACKING_EXCLUDED_TYPES.includes(i.issueType) && (!i.nextTrackingDate || new Date(i.nextTrackingDate) < today));
   const assignedToMeRecent = recentIssues.map(enrichIssue);
